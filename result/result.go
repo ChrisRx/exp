@@ -44,3 +44,17 @@ func Unwrap[T any](seq iter.Seq[Of[T]]) iter.Seq2[T, error] {
 		}
 	}
 }
+
+func Wrap[T any](seq iter.Seq2[T, error]) iter.Seq[Of[T]] {
+	return func(yield func(Of[T]) bool) {
+		for v, err := range seq {
+			if err != nil {
+				yield(Err[T](err))
+				return
+			}
+			if !yield(Ok(v)) {
+				return
+			}
+		}
+	}
+}
