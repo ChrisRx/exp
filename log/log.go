@@ -10,17 +10,66 @@ import (
 
 // Options specifies the configuration for a logger from environment variables.
 type Options struct {
-	Level     slog.Level `env:"LOG_LEVEL" envDefault:"INFO"`
-	Format    Format     `env:"LOG_FORMAT" envDefault:"text"`
-	AddSource bool       `env:"LOG_ADD_SOURCE" envDefault:"true"`
+	Level     *slog.LevelVar `env:"LOG_LEVEL" envDefault:"INFO"`
+	Format    Format         `env:"LOG_FORMAT" envDefault:"text"`
+	AddSource bool           `env:"LOG_ADD_SOURCE" envDefault:"true"`
 }
 
 func (o Options) LogValue() slog.Value {
 	return slog.GroupValue(
-		slog.String("level", o.Level.String()),
+		slog.String("level", o.Level.Level().String()),
 		slog.Bool("addSource", o.AddSource),
 		slog.String("format", o.Format.String()),
 	)
+}
+
+type Option func(*Options)
+
+func WithLevel(lvl slog.Leveler) Option {
+	return func(opts *Options) {
+		switch lvl := lvl.(type) {
+		case slog.Level:
+			opts.Level = new(slog.LevelVar)
+			opts.Level.Set(lvl)
+		case *slog.LevelVar:
+			opts.Level = lvl
+		}
+	}
+}
+
+func WithSource(v bool) Option {
+	return func(opts *Options) {
+		opts.AddSource = v
+	}
+}
+
+func WithFormat(f Format) Option {
+	return func(opts *Options) {
+		opts.Format = f
+	}
+}
+
+func New(opts ...Option) *slog.Logger {
+	o := &Options{
+		Format:    TextFormat,
+		AddSource: true,
+	}
+	for _, opt := range opts {
+		opt(o)
+	}
+
+	hopts := &slog.HandlerOptions{
+		AddSource: o.AddSource,
+		Level:     o.Level,
+	}
+	var h slog.Handler
+	switch o.Format {
+	case JSONFormat:
+		h = slog.NewJSONHandler(os.Stdout, hopts)
+	default:
+		h = slog.NewTextHandler(os.Stdout, hopts)
+	}
+	return slog.New(&ContextHandler{Handler: h})
 }
 
 // defaultOnce ensures that the default logger is only initialized the first
@@ -45,20 +94,12 @@ func SetDefault() {
 			slog.Error("cannot parse log options from environment", slog.Any("error", err))
 			return
 		}
-		defaultLevel.Set(opts.Level)
-		hopts := &slog.HandlerOptions{
-			AddSource: opts.AddSource,
-			Level:     defaultLevel,
-		}
-		var h slog.Handler
-		switch opts.Format {
-		case JSONFormat:
-			h = slog.NewJSONHandler(os.Stdout, hopts)
-		default:
-			h = slog.NewTextHandler(os.Stdout, hopts)
-		}
-		h = &ContextHandler{Handler: h}
-		slog.SetDefault(slog.New(h))
+		defaultLevel.Set(opts.Level.Level())
+		slog.SetDefault(New(
+			WithLevel(defaultLevel),
+			WithFormat(opts.Format),
+			WithSource(opts.AddSource),
+		))
 		slog.Debug("default slog configured from environment", slog.Any("options", opts))
 	})
 }

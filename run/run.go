@@ -35,7 +35,7 @@ func Until(ctx context.Context, fn func() error, interval time.Duration) error {
 	defer ticker.Stop()
 
 	if err := fn(); err != nil {
-		logger.Error("encountered error while looping", slog.Any("error", err))
+		logger.Debug("encountered error while looping", slog.Any("error", err))
 	} else {
 		return nil
 	}
@@ -44,7 +44,7 @@ func Until(ctx context.Context, fn func() error, interval time.Duration) error {
 		select {
 		case <-ticker.C:
 			if err := fn(); err != nil {
-				logger.Error("encountered error while looping", slog.Any("error", err))
+				logger.Debug("encountered error while looping", slog.Any("error", err))
 				continue
 			}
 			return nil
