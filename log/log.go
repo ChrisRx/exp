@@ -50,7 +50,10 @@ func WithFormat(f Format) Option {
 }
 
 func New(opts ...Option) *slog.Logger {
+	lv := new(slog.LevelVar)
+	lv.Set(slog.LevelInfo)
 	o := &Options{
+		Level:     lv,
 		Format:    TextFormat,
 		AddSource: true,
 	}
