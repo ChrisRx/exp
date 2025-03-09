@@ -2,54 +2,60 @@ package run
 
 import (
 	"context"
-	"log/slog"
+	"errors"
 	"time"
-
-	"go.chrisrx.dev/x/log"
 )
 
-func Every(ctx context.Context, fn func() error, interval time.Duration) error {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
+func Every[T Interval](ctx context.Context, fn func(), interval T) {
+	Retry(ctx, asRetryFunc(fn), newRetryOptions(interval)).Wait()
+}
 
-	if err := fn(); err != nil {
-		return err
-	}
+func Until[T Interval](ctx context.Context, fn func() bool, interval T) {
+	Retry(ctx, asRetryFunc(fn), newRetryOptions(interval)).Wait()
+}
 
-	for {
-		select {
-		case <-ticker.C:
-			if err := fn(); err != nil {
-				return err
-			}
-		case <-ctx.Done():
-			return nil
+func UntilE[T Interval](ctx context.Context, fn func() error, interval T) {
+	Retry(ctx, asRetryFunc(fn), newRetryOptions(interval)).Wait()
+}
+
+type Interval interface {
+	time.Duration | RetryOptions
+}
+
+func newRetryOptions[T Interval](interval T) RetryOptions {
+	switch t := any(interval).(type) {
+	case time.Duration:
+		return RetryOptions{
+			InitialInterval: t,
 		}
+	case RetryOptions:
+		return t
+	default:
+		panic("unreachable")
 	}
 }
 
-func Until(ctx context.Context, fn func() error, interval time.Duration) error {
-	logger := log.FromContext(ctx)
+var errContinue = errors.New("continue")
 
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	if err := fn(); err != nil {
-		logger.Debug("encountered error while looping", slog.Any("error", err))
-	} else {
-		return nil
-	}
-
-	for {
-		select {
-		case <-ticker.C:
-			if err := fn(); err != nil {
-				logger.Debug("encountered error while looping", slog.Any("error", err))
-				continue
-			}
-			return nil
-		case <-ctx.Done():
-			return nil
+func asRetryFunc[T interface {
+	func() | func() bool | func() error
+}](fn T) func() error {
+	switch fn := any(fn).(type) {
+	case func():
+		return func() error {
+			fn()
+			return errContinue
 		}
+	case func() bool:
+		return func() error {
+			if fn() {
+				return nil
+			}
+			return errContinue
+		}
+	case func() error:
+		return fn
+	default:
+		panic("unreachable")
 	}
 }
