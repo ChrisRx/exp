@@ -9,6 +9,7 @@ import (
 
 	"github.com/cenkalti/backoff"
 	"github.com/samber/lo"
+
 	"go.chrisrx.dev/x/ptr"
 )
 
