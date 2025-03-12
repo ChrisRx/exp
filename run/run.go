@@ -6,30 +6,30 @@ import (
 	"time"
 )
 
-func Every[T Interval](ctx context.Context, fn func(), interval T) {
-	Retry(ctx, asRetryFunc(fn), newRetryOptions(interval)).Wait()
-}
-
-func Until[T Interval](ctx context.Context, fn func() bool, interval T) {
-	Retry(ctx, asRetryFunc(fn), newRetryOptions(interval)).Wait()
-}
-
-func UntilE[T Interval](ctx context.Context, fn func() error, interval T) {
-	Retry(ctx, asRetryFunc(fn), newRetryOptions(interval)).Wait()
-}
-
 type Interval interface {
-	time.Duration | RetryOptions
+	time.Duration | *RetryOptions
 }
 
-func newRetryOptions[T Interval](interval T) RetryOptions {
+type RetryFunc interface {
+	func() | func() bool | func() error
+}
+
+func Every[R RetryFunc, T Interval](ctx context.Context, fn R, interval T) {
+	Retry(ctx, asRetryFunc(fn), newRetryOptions(interval)).Wait()
+}
+
+func Until[R RetryFunc, T Interval](ctx context.Context, fn R, interval T) {
+	Retry(ctx, asRetryFunc(fn), newRetryOptions(interval)).Wait()
+}
+
+func newRetryOptions[T Interval](interval T) *RetryOptions {
 	switch t := any(interval).(type) {
 	case time.Duration:
-		return RetryOptions{
+		return &RetryOptions{
 			InitialInterval: t,
 		}
 	case RetryOptions:
-		return t
+		return &t
 	default:
 		panic("unreachable")
 	}
