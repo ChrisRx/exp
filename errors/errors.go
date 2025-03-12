@@ -1,4 +1,8 @@
-package xerrors
+// Package errors is a mostly drop-in replacement for the standard library
+// errors package. It provides some extra functions for handling errors, and in
+// cases, like [errors.As], supplants the standard library version with a
+// function using generics.
+package errors
 
 import (
 	"errors"

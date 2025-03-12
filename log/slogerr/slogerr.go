@@ -1,10 +1,9 @@
 package slogerr
 
 import (
-	"errors"
 	"log/slog"
 
-	"go.chrisrx.dev/x/xerrors"
+	"go.chrisrx.dev/x/errors"
 )
 
 // StructuredError is an interface representing an error that contains slog
@@ -58,7 +57,7 @@ func Wrap(err error, args ...any) StructuredError {
 	if err == nil {
 		return nil
 	}
-	if serr, ok := xerrors.As[*serror](err); ok {
+	if serr, ok := errors.As[*serror](err); ok {
 		serr.attrs = append(serr.attrs, args...)
 		return serr
 	}
