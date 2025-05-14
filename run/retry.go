@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cenkalti/backoff"
+	"github.com/cenkalti/backoff/v5"
 	"github.com/samber/lo"
 
 	"go.chrisrx.dev/x/ptr"
@@ -55,8 +55,6 @@ func (ro *RetryOptions) init() {
 			RandomizationFactor: lo.CoalesceOrEmpty(ro.RandomizationFactor, DefaultRandomizationFactor),
 			Multiplier:          lo.CoalesceOrEmpty(ro.Multiplier, DefaultMultiplier),
 			MaxInterval:         lo.CoalesceOrEmpty(ro.MaxInterval, DefaultMaxInterval),
-			MaxElapsedTime:      ro.MaxElapsedTime,
-			Clock:               backoff.SystemClock,
 		}
 	}
 }
@@ -81,8 +79,15 @@ func (ro *RetryOptions) Options() RetryOptions {
 type RetryIterator iter.Seq2[int, error]
 
 func (r RetryIterator) Wait() {
-	for range r {
+	r.WaitE()
+}
+
+func (r RetryIterator) WaitE() error {
+	var lastErr error
+	for _, err := range r {
+		lastErr = err
 	}
+	return lastErr
 }
 
 func (r RetryIterator) Range(fn func(int, error)) {
@@ -109,6 +114,11 @@ type Options interface {
 func Retry(ctx context.Context, fn func() error, ro Options) RetryIterator {
 	var attempts int
 	return func(yield func(attempts int, err error) bool) {
+		if ro.Options().MaxElapsedTime != 0 {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, ro.Options().MaxElapsedTime)
+			defer cancel()
+		}
 		ticker := backoff.NewTicker(ro)
 		defer ticker.Stop()
 

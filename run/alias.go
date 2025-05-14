@@ -3,7 +3,7 @@ package run
 import (
 	"time"
 
-	"github.com/cenkalti/backoff"
+	"github.com/cenkalti/backoff/v5"
 )
 
 type BackOff = backoff.BackOff
