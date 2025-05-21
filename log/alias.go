@@ -1,39 +1,52 @@
 package log
 
-import "log"
+import (
+	"fmt"
+	"log/slog"
+	"os"
+)
 
 func Fatal(v ...any) {
-	log.Fatal(v...)
+	slog.Error(fmt.Sprint(v...))
+	os.Exit(1)
 }
 
 func Fatalf(format string, v ...any) {
-	log.Fatalf(format, v...)
+	slog.Error(fmt.Sprintf(format, v...))
+	os.Exit(1)
 }
 
 func Fatalln(v ...any) {
-	log.Fatalln(v...)
+	slog.Error(fmt.Sprintln(v...))
+	os.Exit(1)
 }
 
 func Panic(v ...any) {
-	log.Panic(v...)
+	s := fmt.Sprint(v...)
+	slog.Error(s)
+	panic(s)
 }
 
 func Panicf(format string, v ...any) {
-	log.Panicf(format, v...)
+	s := fmt.Sprintf(format, v...)
+	slog.Error(s)
+	panic(s)
 }
 
 func Panicln(v ...any) {
-	log.Panicln(v...)
+	s := fmt.Sprintln(v...)
+	slog.Error(s)
+	panic(s)
 }
 
 func Print(v ...any) {
-	log.Print(v...)
+	slog.Info(fmt.Sprint(v...))
 }
 
 func Printf(format string, v ...any) {
-	log.Printf(format, v...)
+	slog.Info(fmt.Sprintf(format, v...))
 }
 
 func Println(v ...any) {
-	log.Println(v...)
+	slog.Info(fmt.Sprintln(v...))
 }
