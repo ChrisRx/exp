@@ -1,6 +1,7 @@
 package ptr_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -54,4 +55,24 @@ func TestIsZero(t *testing.T) {
 		result := ptr.IsZero(tt.input)
 		assert.EqualValues(t, tt.expected, result, tt.name)
 	}
+}
+
+func ExampleNullable() {
+	var s string
+	fmt.Printf("(%[1]T)(%[1]v)\n", ptr.Nullable(&s))
+
+	// Output: (*string)(<nil>)
+}
+
+func ExampleToNullable() {
+	var s struct {
+		Value *string
+	}
+	s.Value = ptr.ToNullable("")
+	fmt.Println(s.Value)
+	s.Value = ptr.ToNullable("not zero")
+	fmt.Println(ptr.From(s.Value))
+
+	// Output: <nil>
+	// not zero
 }
