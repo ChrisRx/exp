@@ -8,8 +8,13 @@ type Semaphore struct {
 // NewSemaphore constructs a new semaphore using the provided size.
 func NewSemaphore(n int) *Semaphore {
 	s := &Semaphore{}
-	s.ch.SetCap(n)
+	s.SetLimit(n)
 	return s
+}
+
+// SetLimit sets the limit for the semaphore.
+func (s *Semaphore) SetLimit(n int) {
+	s.ch.SetCap(n)
 }
 
 // Acquire acquires a semaphore of weight n. If the size given was zero this

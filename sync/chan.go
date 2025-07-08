@@ -1,7 +1,6 @@
 package sync
 
 import (
-	"sync"
 	"sync/atomic"
 
 	"go.chrisrx.dev/x/must"
@@ -83,15 +82,9 @@ func (ch *Chan[T]) swap(new chan T) (_ chan T) {
 }
 
 // closedchan is a reusable closed channel.
-var closedchan = make(chan struct{})
+var closedchan = ClosedChannel[struct{}]()
 
-func init() {
-	close(closedchan)
-}
-
-func ClosedChannel[T any]() func() chan T {
-	return sync.OnceValue(func() (ch chan T) {
-		defer close(ch)
-		return make(chan T)
-	})
+func ClosedChannel[T any]() (ch chan T) {
+	defer close(ch)
+	return make(chan T)
 }
