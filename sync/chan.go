@@ -18,7 +18,11 @@ type Chan[T any] struct {
 	_ noCopy // prevent copying
 
 	v atomic.Pointer[chan T]
-	n int
+}
+
+// Cap returns the current channel capacity.
+func (ch *Chan[T]) Cap() int {
+	return cap(ch.Load())
 }
 
 // Close closes the current channel, if present. The stored value is replaced
@@ -34,9 +38,13 @@ func (ch *Chan[T]) Closed() bool {
 
 // New constructs and stores a new channel. If a channel is already stored, it
 // is closed after being replaced.
+//
+// If capacity is set to zero, then the channel is unbuffered. If capacity is
+// greater than zero, then a buffered channel with the given capacity will be
+// created.
 func (ch *Chan[T]) New(capacity int) chan T {
-	ch.n = capacity
-	return ch.Reset()
+	must.Close(ch.swap(make(chan T, capacity)))
+	return ch.Load()
 }
 
 // Load loads the stored channel. If no channel is stored, a closed channel is
@@ -57,7 +65,7 @@ func (ch *Chan[T]) LoadOrNew() (_ chan T, isNew bool) {
 		if v := ptr.From(old); v != nil {
 			return v, false
 		}
-		new := make(chan T, ch.n)
+		new := make(chan T, ch.Cap())
 		if ch.v.CompareAndSwap(old, &new) {
 			return new, true
 		}
@@ -65,22 +73,13 @@ func (ch *Chan[T]) LoadOrNew() (_ chan T, isNew bool) {
 	panic("Chan.LoadOrNew: infinite loop detected")
 }
 
-// Reset replaces the current channel with a new channel and closes the
-// previous channel. This is useful when needing to signal that channel
-// consumers should close, while establishing a new channel for immediate use.
+// Reset constructs and stores a new channel. It is the same as calling [New]
+// with the current capacity value.
+//
+// This is useful when needing to signal that channel consumers should close,
+// while establishing a new channel for immediate use.
 func (ch *Chan[T]) Reset() chan T {
-	must.Close(ch.swap(make(chan T, ch.n)))
-	return ch.Load()
-}
-
-// Cap returns the current channel capacity.
-func (ch *Chan[T]) Cap() int { return ch.n }
-
-// SetCap sets the channel capacity. If capacity is set to zero, then the
-// channel is unbuffered. If capacity is greater than zero, then a buffered
-// channel with the given capacity will be created.
-func (ch *Chan[T]) SetCap(capacity int) {
-	ch.New(capacity)
+	return ch.New(ch.Cap())
 }
 
 func (ch *Chan[T]) swap(new chan T) (_ chan T) {

@@ -14,7 +14,7 @@ func NewSemaphore(n int) *Semaphore {
 
 // SetLimit sets the limit for the semaphore.
 func (s *Semaphore) SetLimit(n int) {
-	s.ch.SetCap(n)
+	s.ch.New(n)
 }
 
 // Acquire acquires a semaphore of weight n. If the size given was zero this

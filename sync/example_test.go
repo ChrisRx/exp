@@ -8,6 +8,27 @@ import (
 )
 
 func ExampleChan() {
+	var ch sync.Chan[string]
+	c := ch.New(0)
+
+	go func() {
+		defer ch.Close()
+		for range 5 {
+			c <- "done"
+		}
+	}()
+
+	for v := range c {
+		fmt.Println(v)
+	}
+	// Output: done
+	// done
+	// done
+	// done
+	// done
+}
+
+func ExampleChan_buffered() {
 	var ch sync.Chan[int]
 	ch.New(1) <- 10  // initialize and write to buffered channel
 	v := <-ch.Load() // atomically load new channel and read
@@ -25,15 +46,23 @@ func ExampleChan_reset() {
 }
 
 func ExampleLazyChan() {
-	var ch sync.LazyChan[int]
-	defer ch.Close()
+	var ch sync.LazyChan[string]
 
 	go func() {
-		fmt.Println(<-ch.Load())
+		defer ch.Close()
+		for range 5 {
+			ch.Load() <- "done"
+		}
 	}()
 
-	ch.Load() <- 10
-	// Output: 10
+	for v := range ch.Load() {
+		fmt.Println(v)
+	}
+	// Output: done
+	// done
+	// done
+	// done
+	// done
 }
 
 func ExampleSemaphore() {
