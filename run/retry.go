@@ -76,41 +76,12 @@ func (ro *RetryOptions) Options() RetryOptions {
 	return ptr.From(ro)
 }
 
-type RetryIterator iter.Seq2[int, error]
-
-func (r RetryIterator) Wait() {
-	r.WaitE()
-}
-
-func (r RetryIterator) WaitE() error {
-	var lastErr error
-	for _, err := range r {
-		lastErr = err
-	}
-	return lastErr
-}
-
-func (r RetryIterator) Range(fn func(int, error)) {
-	_ = r.RangeE(func(attempts int, err error) error {
-		fn(attempts, err)
-		return nil
-	})
-}
-
-func (r RetryIterator) RangeE(fn func(int, error) error) error {
-	for attempts, err := range r {
-		if err := fn(attempts, err); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 type Options interface {
 	BackOff
 	Options() RetryOptions
 }
 
+// Retry runs a function periodically based on the provided [Options].
 func Retry(ctx context.Context, fn func() error, ro Options) RetryIterator {
 	var attempts int
 	return func(yield func(attempts int, err error) bool) {
@@ -153,4 +124,38 @@ func Retry(ctx context.Context, fn func() error, ro Options) RetryIterator {
 			}
 		}
 	}
+}
+
+type RetryIterator iter.Seq2[int, error]
+
+// Wait ranges over the iterator until no more elements are produced. The last
+// error is ignored.
+func (r RetryIterator) Wait() {
+	_ = r.WaitE()
+}
+
+// Wait ranges over the iterator until no more elements are produced. If an
+// error is encountered, the last error received will be returned.
+func (r RetryIterator) WaitE() error {
+	var lastErr error
+	for _, err := range r {
+		lastErr = err
+	}
+	return lastErr
+}
+
+func (r RetryIterator) Range(fn func(int, error)) {
+	_ = r.RangeE(func(attempts int, err error) error {
+		fn(attempts, err)
+		return nil
+	})
+}
+
+func (r RetryIterator) RangeE(fn func(int, error) error) error {
+	for attempts, err := range r {
+		if err := fn(attempts, err); err != nil {
+			return err
+		}
+	}
+	return nil
 }
