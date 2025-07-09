@@ -45,13 +45,14 @@ func (ch *Chan[T]) Load() chan T {
 	if ch := ptr.From(ch.v.Load()); ch != nil {
 		return ch
 	}
-	return ClosedChannel[T]()
+	return makeClosedChannel[T]()
 }
 
 // LoadOrNew loads the stored channel, if present. If not present, a new
 // channel will be created and the newly stored channel is returned.
 func (ch *Chan[T]) LoadOrNew() (_ chan T, isNew bool) {
-	for {
+	const maxAttempts = 100
+	for range maxAttempts {
 		old := ch.v.Load()
 		if v := ptr.From(old); v != nil {
 			return v, false
@@ -61,6 +62,7 @@ func (ch *Chan[T]) LoadOrNew() (_ chan T, isNew bool) {
 			return new, true
 		}
 	}
+	panic("Chan.LoadOrNew: infinite loop detected")
 }
 
 // Reset replaces the current channel with a new channel and closes the
@@ -85,11 +87,21 @@ func (ch *Chan[T]) swap(new chan T) (_ chan T) {
 	return ptr.From(ch.v.Swap(&new))
 }
 
-// closedchan is a reusable closed channel.
-var closedchan = ClosedChannel[struct{}]()
-
-func ClosedChannel[T any]() chan T {
+// makeClosedChannel constructs a new channel of type T that is returned
+// closed. This is used to create a new channel that doesn't block.
+func makeClosedChannel[T any]() chan T {
 	ch := make(chan T)
 	defer close(ch)
 	return ch
 }
+
+// Note that it must not be embedded, due to the Lock and Unlock methods.
+// noCopy prevents a struct from being copied after the first use. It achieves
+// this by implementing the [sync.Locker] interface, which triggers the go vet
+// copylocks check. It should not be embedded.
+//
+// https://golang.org/issues/8005#issuecomment-190753527
+type noCopy struct{}
+
+func (*noCopy) Lock()   {}
+func (*noCopy) Unlock() {}
