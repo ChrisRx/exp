@@ -6,7 +6,7 @@ import (
 
 // A Waiter uses a [Chan] to wait for an event to occur.
 type Waiter struct {
-	ch   Chan[struct{}]
+	ch   LazyChan[struct{}]
 	done sync.Once
 }
 
