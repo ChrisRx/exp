@@ -26,7 +26,5 @@ func (w *Waiter) Reset() {
 
 // Wait blocks until receiving a done signal.
 func (w *Waiter) Wait() {
-	if ch := w.ch.Load(); ch != nil {
-		<-ch
-	}
+	<-w.ch.Load()
 }

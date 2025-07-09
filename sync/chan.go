@@ -39,9 +39,13 @@ func (ch *Chan[T]) New(capacity int) chan T {
 	return ch.Reset()
 }
 
-// Load loads the stored channel.
+// Load loads the stored channel. If no channel is stored, a closed channel is
+// returned.
 func (ch *Chan[T]) Load() chan T {
-	return ptr.From(ch.v.Load())
+	if ch := ptr.From(ch.v.Load()); ch != nil {
+		return ch
+	}
+	return ClosedChannel[T]()
 }
 
 // LoadOrNew loads the stored channel, if present. If not present, a new
@@ -84,7 +88,8 @@ func (ch *Chan[T]) swap(new chan T) (_ chan T) {
 // closedchan is a reusable closed channel.
 var closedchan = ClosedChannel[struct{}]()
 
-func ClosedChannel[T any]() (ch chan T) {
+func ClosedChannel[T any]() chan T {
+	ch := make(chan T)
 	defer close(ch)
-	return make(chan T)
+	return ch
 }
