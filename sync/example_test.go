@@ -42,7 +42,7 @@ func ExampleSemaphore() {
 
 	go func() {
 		defer sem.Release()
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}()
 
 	sem.Acquire(3)
@@ -55,7 +55,7 @@ func ExampleWaiter() {
 
 	go func() {
 		defer ready.Done()
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}()
 
 	ready.Wait()
@@ -98,6 +98,7 @@ func ExampleBoundedWaitGroup() {
 			fmt.Println("done")
 		}()
 	}
+
 	wg.Wait()
 	// Output: done
 	// done
