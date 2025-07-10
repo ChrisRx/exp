@@ -10,16 +10,21 @@ import (
 )
 
 type Source struct {
-	File string
-	Line int
-	Name string
+	File     string
+	Line     int
+	FullName string
+}
+
+func (s Source) Name() string {
+	return s.FullName[strings.LastIndex(s.FullName, "/")+1:]
 }
 
 func (s Source) String() string {
-	if s.Name == "" {
+	name := s.Name()
+	if name == "" {
 		return fmt.Sprintf("%s:%d", s.File, s.Line)
 	}
-	return fmt.Sprintf("%s:%d %s", s.File, s.Line, s.Name)
+	return fmt.Sprintf("%s:%d %s", s.File, s.Line, name)
 }
 
 func GetSource(skip int) Source {
@@ -29,8 +34,20 @@ func GetSource(skip int) Source {
 		Line: line,
 	}
 	if fn := runtime.FuncForPC(pc); fn != nil {
-		name := fn.Name()
-		s.Name = name[strings.LastIndex(name, "/")+1:]
+		s.FullName = fn.Name()
 	}
 	return s
+}
+
+const maxStackDepth = 10
+
+func GetLocation(ignore func(Source) bool) string {
+	for i := 1; i < maxStackDepth; i++ {
+		s := GetSource(i + 1)
+		if ignore(s) {
+			continue
+		}
+		return s.String()
+	}
+	return "<unknown>"
 }
