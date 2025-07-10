@@ -23,16 +23,16 @@ type Chan[T any] struct {
 	v atomic.Pointer[chan T]
 }
 
-// MakeChan constructs a new unbuffered [Chan] of type T.
-func MakeChan[T any]() *Chan[T] {
+// NewChan constructs a new unbuffered [Chan] of type T.
+func NewChan[T any]() *Chan[T] {
 	var ch Chan[T]
 	ch.New(0)
 	return &ch
 }
 
-// MakeBufferedChan constructs a new buffered [Chan] of type T with the
-// provided capacity.
-func MakeBufferedChan[T any](capacity int) *Chan[T] {
+// NewBufferedChan constructs a new buffered [Chan] of type T with the provided
+// capacity.
+func NewBufferedChan[T any](capacity int) *Chan[T] {
 	var ch Chan[T]
 	ch.New(capacity)
 	return &ch

@@ -46,7 +46,7 @@ func ExampleChan_reset() {
 }
 
 func ExampleChan_send() {
-	ch := sync.MakeChan[int]()
+	ch := sync.NewChan[int]()
 
 	sent := ch.Send(10) // will timeout
 	time.Sleep(200 * time.Millisecond)
@@ -67,8 +67,8 @@ func ExampleChan_send() {
 	// 30
 }
 
-func ExampleMakeChan() {
-	ch := sync.MakeChan[int]().Load()
+func ExampleNewChan() {
+	ch := sync.NewChan[int]().Load()
 
 	go func() {
 		defer close(ch)
