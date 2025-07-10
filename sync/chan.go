@@ -3,8 +3,8 @@ package sync
 import (
 	"sync/atomic"
 
-	"go.chrisrx.dev/x/must"
 	"go.chrisrx.dev/x/ptr"
+	"go.chrisrx.dev/x/safe"
 )
 
 // A Chan is a channel of type T, synchronized with lock-free atomic
@@ -20,6 +20,21 @@ type Chan[T any] struct {
 	v atomic.Pointer[chan T]
 }
 
+// MakeChan constructs a new unbuffered [Chan] of type T.
+func MakeChan[T any]() *Chan[T] {
+	var ch Chan[T]
+	ch.New(0)
+	return &ch
+}
+
+// MakeBufferedChan constructs a new buffered [Chan] of type T with the
+// provided capacity.
+func MakeBufferedChan[T any](capacity int) *Chan[T] {
+	var ch Chan[T]
+	ch.New(capacity)
+	return &ch
+}
+
 // Cap returns the current channel capacity.
 func (ch *Chan[T]) Cap() int {
 	return cap(ch.Load())
@@ -28,7 +43,7 @@ func (ch *Chan[T]) Cap() int {
 // Close closes the current channel, if present. The stored value is replaced
 // with a nil.
 func (ch *Chan[T]) Close() {
-	must.Close(ch.swap(nil))
+	safe.Close(ch.swap(nil))
 }
 
 // Closed returns true when the current channel is closed.
@@ -43,14 +58,14 @@ func (ch *Chan[T]) Closed() bool {
 // greater than zero, then a buffered channel with the given capacity will be
 // created.
 func (ch *Chan[T]) New(capacity int) chan T {
-	must.Close(ch.swap(make(chan T, capacity)))
+	safe.Close(ch.swap(make(chan T, capacity)))
 	return ch.Load()
 }
 
 // Load loads the stored channel. If no channel is stored, a closed channel is
 // returned.
 func (ch *Chan[T]) Load() chan T {
-	if ch := ptr.From(ch.v.Load()); ch != nil {
+	if ch := ch.load(); ch != nil {
 		return ch
 	}
 	return makeClosedChannel[T]()
@@ -61,6 +76,8 @@ func (ch *Chan[T]) Load() chan T {
 func (ch *Chan[T]) LoadOrNew() (_ chan T, isNew bool) {
 	const maxAttempts = 100
 	for range maxAttempts {
+		// The stored value can be a nil pointer or a nil chan, so we need the
+		// actual value to work with CompareAndSwap.
 		old := ch.v.Load()
 		if v := ptr.From(old); v != nil {
 			return v, false
@@ -82,7 +99,11 @@ func (ch *Chan[T]) Reset() chan T {
 	return ch.New(ch.Cap())
 }
 
-func (ch *Chan[T]) swap(new chan T) (_ chan T) {
+func (ch *Chan[T]) load() chan T {
+	return ptr.From(ch.v.Load())
+}
+
+func (ch *Chan[T]) swap(new chan T) chan T {
 	return ptr.From(ch.v.Swap(&new))
 }
 
