@@ -45,6 +45,46 @@ func ExampleChan_reset() {
 	// Output: 20
 }
 
+func ExampleChan_send() {
+	ch := sync.MakeChan[int]()
+
+	sent := ch.Send(10) // will timeout
+	time.Sleep(200 * time.Millisecond)
+	fmt.Println(sent)
+
+	go func() {
+		defer ch.Close()
+
+		ch.Send(20)
+		ch.Send(30)
+	}()
+
+	for v := range ch.Recv() {
+		fmt.Println(v)
+	}
+	// Output: false
+	// 20
+	// 30
+}
+
+func ExampleMakeChan() {
+	ch := sync.MakeChan[int]().Load()
+
+	go func() {
+		defer close(ch)
+		ch <- 10
+		ch <- 20
+		ch <- 30
+	}()
+
+	for v := range ch {
+		fmt.Println(v)
+	}
+	// Output: 10
+	// 20
+	// 30
+}
+
 func ExampleLazyChan() {
 	var ch sync.LazyChan[string]
 

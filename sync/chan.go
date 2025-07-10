@@ -1,8 +1,11 @@
 package sync
 
 import (
+	"iter"
 	"sync/atomic"
+	"time"
 
+	"go.chrisrx.dev/x/must"
 	"go.chrisrx.dev/x/ptr"
 	"go.chrisrx.dev/x/safe"
 )
@@ -97,6 +100,39 @@ func (ch *Chan[T]) LoadOrNew() (_ chan T, isNew bool) {
 // while establishing a new channel for immediate use.
 func (ch *Chan[T]) Reset() chan T {
 	return ch.New(ch.Cap())
+}
+
+const defaultSendTimeout = 100 * time.Millisecond
+
+// Send attempts to send a value on the stored channel. If uninitialized or
+// closed, send returns immediately. It will wait for the value to be sent for
+// 100ms before returning. If the channel is closed while attempting to send a
+// value, the send on closed panic is recovered and logged.
+func (ch *Chan[T]) Send(msg T) (delivered bool) {
+	defer must.Recover()
+
+	v := ch.load()
+	if v == nil {
+		return false
+	}
+
+	select {
+	case v <- msg:
+		return true
+	case <-time.After(defaultSendTimeout):
+		return false
+	}
+}
+
+// Recv reads values from the stored channel and returns as an iterator.
+func (ch *Chan[T]) Recv() iter.Seq[T] {
+	return func(yield func(msg T) bool) {
+		for msg := range ch.Load() {
+			if !yield(msg) {
+				return
+			}
+		}
+	}
 }
 
 func (ch *Chan[T]) load() chan T {
