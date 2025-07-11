@@ -2,6 +2,7 @@ package sync
 
 import (
 	"iter"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -16,23 +17,26 @@ import (
 // The initial value is nil, requiring a call to a method that initializes a
 // channel, such as [Chan.New] or [Chan.Reset]. If lazy initialization is
 // needed, [LazyChan] can be used.
+//
+// Since Chan uses [atomic.Pointer] to store the underlying channel, it
+// inherits the same limitations disallowing copying and spurious type
+// conversion.
 type Chan[T any] struct {
-	_ [0]*T  // prevent type casting
-	_ noCopy // prevent copying
-
 	v atomic.Pointer[chan T]
 }
 
 // NewChan constructs a new unbuffered [Chan] of type T.
 func NewChan[T any]() *Chan[T] {
-	var ch Chan[T]
-	ch.New(0)
-	return &ch
+	return newChan[T](0)
 }
 
 // NewBufferedChan constructs a new buffered [Chan] of type T with the provided
 // capacity.
 func NewBufferedChan[T any](capacity int) *Chan[T] {
+	return newChan[T](capacity)
+}
+
+func newChan[T any](capacity int) *Chan[T] {
 	var ch Chan[T]
 	ch.New(capacity)
 	return &ch
@@ -68,10 +72,23 @@ func (ch *Chan[T]) New(capacity int) chan T {
 // Load loads the stored channel. If no channel is stored, a closed channel is
 // returned.
 func (ch *Chan[T]) Load() chan T {
+	v, _ := ch.TryLoad()
+	return v
+}
+
+func (ch *Chan[T]) TryLoad() (_ chan T, ok bool) {
 	if ch := ch.load(); ch != nil {
-		return ch
+		return ch, true
 	}
-	return makeClosedChannel[T]()
+	return makeClosedChannel[T](), false
+}
+
+// makeClosedChannel constructs a new channel of type T that is returned
+// closed. This is used to create a new channel that doesn't block.
+func makeClosedChannel[T any]() chan T {
+	ch := make(chan T)
+	defer close(ch)
+	return ch
 }
 
 // LoadOrNew loads the stored channel, if present. If not present, a new
@@ -102,37 +119,51 @@ func (ch *Chan[T]) Reset() chan T {
 	return ch.New(ch.Cap())
 }
 
+// Recv returns the stored channel as receive-only.
+func (ch *Chan[T]) Recv() <-chan T {
+	return ch.Load()
+}
+
+// RecvSeq reads values from the stored channel and returns as an iterator.
+func (ch *Chan[T]) RecvSeq() iter.Seq[T] {
+	return func(yield func(msg T) bool) {
+		for msg := range ch.Recv() {
+			if !yield(msg) {
+				return
+			}
+		}
+	}
+}
+
 const defaultSendTimeout = 100 * time.Millisecond
 
 // Send attempts to send a value on the stored channel. If uninitialized or
 // closed, send returns immediately. It will wait for the value to be sent for
 // 100ms before returning. If the channel is closed while attempting to send a
 // value, the send on closed panic is recovered and logged.
-func (ch *Chan[T]) Send(msg T) (delivered bool) {
-	defer must.Recover()
+func (ch *Chan[T]) Send(messages ...T) (sent bool) {
+	return ch.SendSeq(slices.Values(messages))
+}
 
+func (ch *Chan[T]) SendSeq(seq iter.Seq[T]) (sent bool) {
 	v := ch.load()
 	if v == nil {
 		return false
 	}
 
-	select {
-	case v <- msg:
-		return true
-	case <-time.After(defaultSendTimeout):
-		return false
-	}
-}
+	t := time.NewTimer(defaultSendTimeout)
+	defer t.Stop()
 
-// Recv reads values from the stored channel and returns as an iterator.
-func (ch *Chan[T]) Recv() iter.Seq[T] {
-	return func(yield func(msg T) bool) {
-		for msg := range ch.Load() {
-			if !yield(msg) {
-				return
-			}
+	defer must.Recover()
+	for msg := range seq {
+		select {
+		case v <- msg:
+			t.Reset(defaultSendTimeout)
+		case <-t.C:
+			return false
 		}
 	}
+	return true
 }
 
 func (ch *Chan[T]) load() chan T {
@@ -142,22 +173,3 @@ func (ch *Chan[T]) load() chan T {
 func (ch *Chan[T]) swap(new chan T) chan T {
 	return ptr.From(ch.v.Swap(&new))
 }
-
-// makeClosedChannel constructs a new channel of type T that is returned
-// closed. This is used to create a new channel that doesn't block.
-func makeClosedChannel[T any]() chan T {
-	ch := make(chan T)
-	defer close(ch)
-	return ch
-}
-
-// Note that it must not be embedded, due to the Lock and Unlock methods.
-// noCopy prevents a struct from being copied after the first use. It achieves
-// this by implementing the [sync.Locker] interface, which triggers the go vet
-// copylocks check. It should not be embedded.
-//
-// https://golang.org/issues/8005#issuecomment-190753527
-type noCopy struct{}
-
-func (*noCopy) Lock()   {}
-func (*noCopy) Unlock() {}

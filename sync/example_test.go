@@ -2,6 +2,7 @@ package sync_test
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"go.chrisrx.dev/x/sync"
@@ -55,8 +56,7 @@ func ExampleChan_send() {
 	go func() {
 		defer ch.Close()
 
-		ch.Send(20)
-		ch.Send(30)
+		ch.Send(20, 30)
 	}()
 
 	for v := range ch.Recv() {
@@ -67,7 +67,26 @@ func ExampleChan_send() {
 	// 30
 }
 
-func ExampleNewChan() {
+func ExampleChan_iter() {
+	ch := sync.NewChan[int]()
+
+	go func() {
+		defer ch.Close()
+
+		ch.SendSeq(
+			slices.Values([]int{10, 20, 30}),
+		)
+	}()
+
+	for v := range ch.RecvSeq() {
+		fmt.Println(v)
+	}
+	// Output: 10
+	// 20
+	// 30
+}
+
+func ExampleChan_newChan() {
 	ch := sync.NewChan[int]().Load()
 
 	go func() {
