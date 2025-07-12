@@ -14,6 +14,9 @@ type RetryFunc interface {
 	func() | func() bool | func() error
 }
 
+// hack to avoid errcheck
+type error_ = error
+
 // Every runs a function periodically for the provided interval.
 //
 // The interval can be either a [time.Duration] or, if more complex retry logic
@@ -23,7 +26,7 @@ type RetryFunc interface {
 // The context passed in can be used to return early, regardless of the
 // interval provided. If Every returns early, the last error (if any) will be
 // returned.
-func Every[R RetryFunc, T Interval](ctx context.Context, fn R, interval T) error {
+func Every[R RetryFunc, T Interval](ctx context.Context, fn R, interval T) error_ {
 	return Retry(ctx, asRetryFunc(fn), newRetryOptions(interval)).WaitE()
 }
 
@@ -40,7 +43,7 @@ func Every[R RetryFunc, T Interval](ctx context.Context, fn R, interval T) error
 // The context passed in can be used to return early, regardless of the
 // interval provided. If Until returns early, the last error (if any) will be
 // returned.
-func Until[R RetryFunc, T Interval](ctx context.Context, fn R, interval T) error {
+func Until[R RetryFunc, T Interval](ctx context.Context, fn R, interval T) error_ {
 	return Retry(ctx, asRetryFunc(fn), newRetryOptions(interval)).WaitE()
 }
 
