@@ -1,9 +1,14 @@
 package safe
 
-// Note that it must not be embedded, due to the Lock and Unlock methods.
-// noCopy prevents a struct from being copied after the first use. It achieves
-// this by implementing the [sync.Locker] interface, which triggers the go vet
-// copylocks check. It should not be embedded.
+// NoCopy implements [sync.Locker] which means that adding it to a struct
+// triggers the go vet copylocks check. This makes it useful to add to structs
+// that shouldn't be copied after first use:
+//
+//	type S struct {
+//		_ safe.NoCopy
+//	}
+//
+// It should not be embedded, since it would expose the [sync.Locker] methods.
 //
 // https://golang.org/issues/8005#issuecomment-190753527
 type NoCopy struct{}
