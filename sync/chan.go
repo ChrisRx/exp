@@ -145,6 +145,29 @@ func (ch *Chan[T]) Send(messages ...T) (sent bool) {
 	return ch.SendSeq(slices.Values(messages))
 }
 
+// TrySend attempts to send values on the stored channel. It returns
+// immediately if any of the values cannot be sent immediately.
+//
+// If the channel is closed while attempting to send a value, the send on
+// closed panic is recovered and logged.
+func (ch *Chan[T]) TrySend(messages ...T) (sent bool) {
+	switch v := ch.Load(); v {
+	case nil:
+		return false
+	default:
+		defer must.Recover()
+		for _, msg := range messages {
+			select {
+			case v <- msg:
+			default:
+				return false
+			}
+		}
+		return true
+	}
+}
+
+// SendSeq attempts to send a sequence of values on the stored channel.
 func (ch *Chan[T]) SendSeq(seq iter.Seq[T]) (sent bool) {
 	v := ch.load()
 	if v == nil {

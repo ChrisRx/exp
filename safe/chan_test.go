@@ -19,10 +19,9 @@ func TestClose(t *testing.T) {
 }
 
 func TestCatch(t *testing.T) {
-	terr := errors.New("caught error")
-	err := func() (err error) {
+	expected := errors.New("caught error")
+	assert.Error(t, expected, func() (err error) {
 		defer must.Catch(ptr.To(err))
-		panic(terr)
-	}()
-	assert.Error(t, terr, err)
+		panic(expected)
+	}())
 }
