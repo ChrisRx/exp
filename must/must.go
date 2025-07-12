@@ -12,3 +12,6 @@ func Ok[T any](v T, err error) (zero T) {
 	}
 	return v
 }
+
+func Get0[T1, T2 any](v1 T1, v2 T2) T1 { return v1 }
+func Get1[T1, T2 any](v1 T1, v2 T2) T2 { return v2 }

@@ -7,7 +7,6 @@ require (
 	github.com/cenkalti/backoff/v5 v5.0.2
 	github.com/samber/lo v1.49.1
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/exp v0.0.0-20250106191152-7588d65b2ba8
 )
 
 require (

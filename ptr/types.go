@@ -1,7 +1,7 @@
 package ptr
 
 import (
-	"golang.org/x/exp/constraints"
+	"go.chrisrx.dev/x/constraints"
 )
 
 // Int returns a int pointer value for the provided integer value.
