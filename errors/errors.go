@@ -41,3 +41,12 @@ func Wrap(err error, msg string) error {
 	}
 	return fmt.Errorf("%s: %w", msg, err)
 }
+
+func Ignore(err error, ignored ...error) error {
+	for _, ierr := range ignored {
+		if errors.Is(err, ierr) {
+			return nil
+		}
+	}
+	return err
+}
