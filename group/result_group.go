@@ -20,7 +20,7 @@ func NewResultGroup[T any](ctx context.Context, opts ...GroupOption) *ResultGrou
 	o := newOptions().Apply(opts)
 	r := &ResultGroup[T]{
 		g:       New(ctx, opts...),
-		results: ptr.From(sync.NewBufferedChan[future.Value[T]](o.ResultsBuffer)),
+		results: ptr.From(sync.NewChan[future.Value[T]](o.ResultsBuffer)),
 	}
 	return r
 }
@@ -45,7 +45,10 @@ func (r *ResultGroup[T]) Go(fn func(context.Context) (T, error)) future.Value[T]
 		// channel buffer should just be dropped. This will be typical in cases
 		// where the returned future is handled manually (i.e. instead of using
 		// [ResultGroup.Get]).
-		r.results.TrySend(v)
+		select {
+		case r.results.Load() <- v:
+		default:
+		}
 		return err
 	})
 	return v

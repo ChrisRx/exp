@@ -47,7 +47,7 @@ func ExampleChan_reset() {
 }
 
 func ExampleChan_send() {
-	ch := sync.NewChan[int]()
+	ch := sync.NewChan[int](0)
 
 	sent := ch.Send(10) // will timeout
 	time.Sleep(200 * time.Millisecond)
@@ -68,17 +68,17 @@ func ExampleChan_send() {
 }
 
 func ExampleChan_iter() {
-	ch := sync.NewChan[int]()
+	ch := sync.NewSeqChan[int](0)
 
 	go func() {
 		defer ch.Close()
 
-		ch.SendSeq(
+		ch.Send(
 			slices.Values([]int{10, 20, 30}),
 		)
 	}()
 
-	for v := range ch.RecvSeq() {
+	for v := range ch.Recv() {
 		fmt.Println(v)
 	}
 	// Output: 10
@@ -87,7 +87,7 @@ func ExampleChan_iter() {
 }
 
 func ExampleChan_newChan() {
-	ch := sync.NewChan[int]().Load()
+	ch := sync.NewChan[int](0).Load()
 
 	go func() {
 		defer close(ch)

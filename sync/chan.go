@@ -1,8 +1,6 @@
 package sync
 
 import (
-	"iter"
-	"slices"
 	"sync/atomic"
 	"time"
 
@@ -25,18 +23,10 @@ type Chan[T any] struct {
 	v atomic.Pointer[chan T]
 }
 
-// NewChan constructs a new unbuffered [Chan] of type T.
-func NewChan[T any]() *Chan[T] {
-	return newChan[T](0)
-}
-
-// NewBufferedChan constructs a new buffered [Chan] of type T with the provided
-// capacity.
-func NewBufferedChan[T any](capacity int) *Chan[T] {
-	return newChan[T](capacity)
-}
-
-func newChan[T any](capacity int) *Chan[T] {
+// NewChan constructs a new [Chan] of type T. If capacity is greater than zero,
+// it is initialized with a buffered channel, otherwise the channel is
+// unbuffered.
+func NewChan[T any](capacity int) *Chan[T] {
 	var ch Chan[T]
 	ch.New(capacity)
 	return &ch
@@ -55,7 +45,7 @@ func (ch *Chan[T]) Close() {
 
 // Closed returns true when the current channel is closed.
 func (ch *Chan[T]) Closed() bool {
-	return ch.Load() == nil
+	return ch.load() == nil
 }
 
 // New constructs and stores a new channel. If a channel is already stored, it
@@ -72,15 +62,10 @@ func (ch *Chan[T]) New(capacity int) chan T {
 // Load loads the stored channel. If no channel is stored, a closed channel is
 // returned.
 func (ch *Chan[T]) Load() chan T {
-	v, _ := ch.TryLoad()
-	return v
-}
-
-func (ch *Chan[T]) TryLoad() (_ chan T, ok bool) {
 	if ch := ch.load(); ch != nil {
-		return ch, true
+		return ch
 	}
-	return makeClosedChannel[T](), false
+	return makeClosedChannel[T]()
 }
 
 // makeClosedChannel constructs a new channel of type T that is returned
@@ -124,69 +109,29 @@ func (ch *Chan[T]) Recv() <-chan T {
 	return ch.Load()
 }
 
-// RecvSeq reads values from the stored channel and returns as an iterator.
-func (ch *Chan[T]) RecvSeq() iter.Seq[T] {
-	return func(yield func(msg T) bool) {
-		for msg := range ch.Recv() {
-			if !yield(msg) {
-				return
-			}
-		}
-	}
-}
-
-const defaultSendTimeout = 100 * time.Millisecond
+const sendTimeout = 100 * time.Millisecond
 
 // Send attempts to send a value on the stored channel. If uninitialized or
 // closed, send returns immediately. It will wait for the value to be sent for
 // 100ms before returning. If the channel is closed while attempting to send a
 // value, the send on closed panic is recovered and logged.
 func (ch *Chan[T]) Send(messages ...T) (sent bool) {
-	return ch.SendSeq(slices.Values(messages))
-}
+	if v := ch.load(); v != nil {
+		t := time.NewTimer(sendTimeout)
+		defer t.Stop()
 
-// TrySend attempts to send values on the stored channel. It returns
-// immediately if any of the values cannot be sent immediately.
-//
-// If the channel is closed while attempting to send a value, the send on
-// closed panic is recovered and logged.
-func (ch *Chan[T]) TrySend(messages ...T) (sent bool) {
-	switch v := ch.Load(); v {
-	case nil:
-		return false
-	default:
 		defer must.Recover()
 		for _, msg := range messages {
 			select {
 			case v <- msg:
-			default:
+				t.Reset(sendTimeout)
+			case <-t.C:
 				return false
 			}
 		}
 		return true
 	}
-}
-
-// SendSeq attempts to send a sequence of values on the stored channel.
-func (ch *Chan[T]) SendSeq(seq iter.Seq[T]) (sent bool) {
-	v := ch.load()
-	if v == nil {
-		return false
-	}
-
-	t := time.NewTimer(defaultSendTimeout)
-	defer t.Stop()
-
-	defer must.Recover()
-	for msg := range seq {
-		select {
-		case v <- msg:
-			t.Reset(defaultSendTimeout)
-		case <-t.C:
-			return false
-		}
-	}
-	return true
+	return false
 }
 
 func (ch *Chan[T]) load() chan T {
