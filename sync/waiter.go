@@ -1,13 +1,9 @@
 package sync
 
-import (
-	"sync"
-)
-
 // A Waiter uses a [LazyChan] to wait for an event to occur.
 type Waiter struct {
 	ch   LazyChan[struct{}]
-	done sync.Once
+	done OnceAgain
 }
 
 // Done sends a done signal for any waiters currently blocked.
@@ -21,7 +17,7 @@ func (w *Waiter) Done() {
 // release immediately.
 func (w *Waiter) Reset() {
 	w.ch.Reset()
-	w.done = sync.Once{}
+	w.done.Reset()
 }
 
 // Wait blocks until receiving a done signal.

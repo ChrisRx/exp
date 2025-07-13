@@ -15,7 +15,7 @@ type OnceAgain struct {
 }
 
 func (o *OnceAgain) Do(f func()) {
-	if o.done.Load() {
+	if !o.done.Load() {
 		o.doSlow(f)
 	}
 }
@@ -28,7 +28,7 @@ func (o *OnceAgain) Reset() {
 func (o *OnceAgain) doSlow(f func()) {
 	o.m.Lock()
 	defer o.m.Unlock()
-	if o.done.Load() {
+	if !o.done.Load() {
 		defer o.done.Store(true)
 		f()
 	}
