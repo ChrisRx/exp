@@ -38,10 +38,10 @@ func ExampleChan_buffered() {
 }
 
 func ExampleChan_reset() {
-	var ch sync.Chan[int]
-	ch.New(1) <- 10  // initialize and write to buffered channel
+	ch := sync.NewChan[int](10)
+	ch.Load() <- 10
 	ch.Reset() <- 20 // reset without reading, and send new value
-	v := <-ch.Load() // atomically load new channel and read
+	v := <-ch.Recv()
 	fmt.Println(v)
 	// Output: 20
 }
@@ -63,25 +63,6 @@ func ExampleChan_send() {
 		fmt.Println(v)
 	}
 	// Output: false
-	// 20
-	// 30
-}
-
-func ExampleChan_iter() {
-	ch := sync.NewSeqChan[int](0)
-
-	go func() {
-		defer ch.Close()
-
-		ch.Send(
-			slices.Values([]int{10, 20, 30}),
-		)
-	}()
-
-	for v := range ch.Recv() {
-		fmt.Println(v)
-	}
-	// Output: 10
 	// 20
 	// 30
 }
@@ -136,6 +117,23 @@ func ExampleSemaphore() {
 	sem.Acquire(3)
 	fmt.Println("done")
 	// Output: done
+}
+
+func ExampleSeqChan() {
+	ch := sync.NewSeqChan[int](0)
+
+	go func() {
+		defer ch.Close()
+
+		ch.Send(slices.Values([]int{10, 20, 30}))
+	}()
+
+	for v := range ch.Recv() {
+		fmt.Println(v)
+	}
+	// Output: 10
+	// 20
+	// 30
 }
 
 func ExampleWaiter() {

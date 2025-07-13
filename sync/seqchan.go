@@ -14,8 +14,7 @@ type SeqChan[T any] struct {
 	Chan[T]
 }
 
-// NewBufferedChan constructs a new buffered [Chan] of type T with the provided
-// capacity.
+// NewSeqChan constructs a new [SeqChan] of type T with the provided capacity.
 func NewSeqChan[T any](capacity int) *SeqChan[T] {
 	return &SeqChan[T]{
 		Chan: ptr.From(NewChan[T](capacity)),

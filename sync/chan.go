@@ -89,6 +89,7 @@ func (ch *Chan[T]) LoadOrNew() (_ chan T, isNew bool) {
 		}
 		new := make(chan T, ch.Cap())
 		if ch.v.CompareAndSwap(old, &new) {
+			safe.Close(ptr.From(old))
 			return new, true
 		}
 	}

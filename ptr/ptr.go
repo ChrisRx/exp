@@ -1,4 +1,4 @@
-// Package ptr
+// Package ptr contains functions for handling pointer values.
 package ptr
 
 import (
