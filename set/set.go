@@ -6,8 +6,6 @@ import (
 	"go.chrisrx.dev/x/sync"
 )
 
-// fmtsort?
-
 type Set[K comparable] struct {
 	m    map[K]struct{}
 	once sync.OnceAgain
@@ -18,20 +16,14 @@ func (s *Set[K]) Add(v K) {
 	s.m[v] = struct{}{}
 }
 
-func (s *Set[K]) Remove(v K) {
-	s.init()
-	delete(s.m, v)
+func (s *Set[K]) Clear() {
+	s.once.Reset()
 }
 
 func (s *Set[K]) Contains(v K) bool {
 	s.init()
 	_, ok := s.m[v]
 	return ok
-}
-
-func (s *Set[K]) Clear() {
-	s.once.Reset()
-	s.init()
 }
 
 func (s *Set[K]) Len() int {
@@ -47,6 +39,11 @@ func (s *Set[K]) List() iter.Seq[K] {
 			}
 		}
 	}
+}
+
+func (s *Set[K]) Remove(v K) {
+	s.init()
+	delete(s.m, v)
 }
 
 func (s *Set[K]) init() {

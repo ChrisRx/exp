@@ -9,18 +9,11 @@ import (
 
 // Group manages a pool of goroutines.
 type Group struct {
-	wg sync.BoundedWaitGroup
-
-	// The original context provided to [Group.New]. It is needed to reset after
-	// calls to [Group.Wait].
 	parent context.Context
-
-	// A child context is used internally to cancel spawned goroutines. A new
-	// child context is derived after successful calls to [Group.Wait] to allow
-	// [Group] to be re-used.
 	ctx    context.Context
 	cancel context.CancelCauseFunc
 
+	wg    sync.BoundedWaitGroup
 	done  sync.Chan[error]
 	ready sync.Waiter
 
