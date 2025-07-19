@@ -2,25 +2,29 @@ package group_test
 
 import (
 	"context"
-	"fmt"
-	"math/rand/v2"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"go.chrisrx.dev/x/future"
+
+	"go.chrisrx.dev/x/chans"
 	"go.chrisrx.dev/x/group"
+	"go.chrisrx.dev/x/sync"
 )
 
 func TestGroup(t *testing.T) {
-	t.Parallel()
+	// number of goroutines
+	n := 10
 
 	t.Run("basic", func(t *testing.T) {
+		t.Parallel()
+		var done atomic.Uint32
 		g := group.New(t.Context())
-		for i := range 10 {
+		for range n {
 			g.Go(func(ctx context.Context) error {
+				defer done.Add(1)
 				time.Sleep(10 * time.Millisecond)
-				fmt.Printf("loop %d\n", i)
 				return nil
 			})
 		}
@@ -28,88 +32,96 @@ func TestGroup(t *testing.T) {
 		if err := g.Wait(); err != nil {
 			t.Fatal(err)
 		}
+		assert.Equal(t, n, int(done.Load()))
 	})
 
 	t.Run("method chaining", func(t *testing.T) {
+		t.Parallel()
+		var done atomic.Uint32
 		if err := group.New(t.Context()).Go(func(ctx context.Context) error {
+			defer done.Add(1)
 			time.Sleep(100 * time.Millisecond)
 			return nil
 		}).Go(func(ctx context.Context) error {
+			defer done.Add(1)
 			time.Sleep(500 * time.Millisecond)
 			return nil
 		}).Wait(); err != nil {
 			t.Fatal(err)
 		}
+		assert.Equal(t, 2, int(done.Load()))
 	})
-}
 
-func TestResultGroup(t *testing.T) {
-	t.Parallel()
-
-	t.Run("basic", func(t *testing.T) {
-		g := group.NewResultGroup[string](t.Context())
-		results := make([]future.Value[string], 0)
-		for i := range 10 {
-			results = append(results, g.Go(func(ctx context.Context) (string, error) {
-				time.Sleep(500 * time.Millisecond)
-				return fmt.Sprintf("loop %d", i), nil
-			}))
+	t.Run("wait again", func(t *testing.T) {
+		t.Parallel()
+		var done atomic.Uint32
+		g := group.New(t.Context())
+		for range n {
+			g.Go(func(ctx context.Context) error {
+				defer done.Add(1)
+				time.Sleep(10 * time.Millisecond)
+				return nil
+			})
 		}
 
-		time.Sleep(600 * time.Millisecond)
-
-		for _, result := range results {
-			v, err := result.Get()
-			if err != nil {
-				t.Fatal(err)
-			}
-			fmt.Println(v)
+		if err := g.Wait(); err != nil {
+			t.Fatal(err)
+		}
+		for range n {
+			g.Go(func(ctx context.Context) error {
+				defer done.Add(1)
+				time.Sleep(10 * time.Millisecond)
+				return nil
+			})
 		}
 		if err := g.Wait(); err != nil {
 			t.Fatal(err)
 		}
+		assert.Equal(t, n*2, int(done.Load()))
 	})
 
-	t.Run("iterator", func(t *testing.T) {
-		g := group.NewResultGroup[string](t.Context())
-		for i := range 10 {
-			g.Go(func(ctx context.Context) (string, error) {
-				n := rand.IntN(300-100+1) + 100
-				time.Sleep(time.Duration(n) * time.Millisecond)
-				return fmt.Sprintf("loop %d", i), nil
+	t.Run("timeout", func(t *testing.T) {
+		t.Parallel()
+		var done atomic.Uint32
+		ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+		defer cancel()
+
+		g := group.New(ctx)
+		g.Go(func(ctx context.Context) error {
+			defer done.Add(1)
+			<-ctx.Done()
+			return ctx.Err()
+		})
+		for range n {
+			g.Go(func(ctx context.Context) error {
+				defer done.Add(1)
+				time.Sleep(10 * time.Millisecond)
+				return nil
+			})
+		}
+		assert.ErrorIs(t, g.Wait(), context.DeadlineExceeded)
+		assert.Equal(t, n+1, int(done.Load()))
+	})
+
+	t.Run("multiple wait callers", func(t *testing.T) {
+		t.Parallel()
+		var done atomic.Uint32
+		g := group.New(t.Context())
+		for range n {
+			g.Go(func(ctx context.Context) error {
+				defer done.Add(1)
+				time.Sleep(10 * time.Millisecond)
+				return nil
 			})
 		}
 
-		var i int
-		for v, err := range g.Get() {
-			if err != nil {
-				t.Fatal(err)
-			}
-			i++
-			fmt.Println(v)
+		ch := sync.NewChan[error](1)
+		defer ch.Close()
+		go func() { ch.Load() <- g.Wait() }()
+		go func() { ch.Load() <- g.Wait() }()
+		for _, err := range chans.CollectN(ch.Recv(), 2) {
+			assert.NoError(t, err)
 		}
-		assert.Equal(t, 10, i)
-	})
-
-	t.Run("iterator with limit", func(t *testing.T) {
-		// t.Skip()
-		g := group.NewResultGroup[string](t.Context(), group.WithLimit(8))
-		for i := range 10 {
-			g.Go(func(ctx context.Context) (string, error) {
-				n := rand.IntN(300-100+1) + 100
-				time.Sleep(time.Duration(n) * time.Millisecond)
-				return fmt.Sprintf("loop %d", i), nil
-			})
-		}
-
-		var i int
-		for v, err := range g.Get() {
-			if err != nil {
-				t.Fatal(err)
-			}
-			i++
-			fmt.Println(v)
-		}
-		assert.Equal(t, 10, i)
+		assert.Equal(t, n, int(done.Load()))
 	})
 }
