@@ -69,3 +69,11 @@ func Reverse[S ~[]E, E any](s S) S {
 	slices.Reverse(s)
 	return s
 }
+
+func Concat[S ~[]E, E any](ss ...S) S {
+	return slices.Concat(ss...)
+}
+
+func Repeat[S ~[]E, E any](x S, count int) S {
+	return slices.Repeat(x, count)
+}

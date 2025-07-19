@@ -110,6 +110,23 @@ func (ch *Chan[T]) Recv() <-chan T {
 	return ch.Load()
 }
 
+// CloseAndRecv closes the stored channel and returns a results channel with
+// the remaining elements.
+func (ch *Chan[T]) CloseAndRecv() <-chan T {
+	if v := ch.load(); v != nil {
+		ch.Close()
+		results := make(chan T)
+		go func() {
+			defer close(results)
+			for elem := range v {
+				results <- elem
+			}
+		}()
+		return results
+	}
+	return makeClosedChannel[T]()
+}
+
 const sendTimeout = 100 * time.Millisecond
 
 // Send attempts to send a value on the stored channel. If uninitialized or

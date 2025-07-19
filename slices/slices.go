@@ -7,3 +7,10 @@ func Map[T any, R any](col []T, fn func(elem T) R) []R {
 	}
 	return results
 }
+
+func FromChan[T any](ch <-chan T) (s []T) {
+	for elem := range ch {
+		s = append(s, elem)
+	}
+	return
+}
