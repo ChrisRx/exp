@@ -95,7 +95,7 @@ func TestChan(t *testing.T) {
 			messages[i] = i
 		}
 		ch := sync.NewChan[int](buf)
-		assert.Equal(t, false, ch.Send(messages...))
+		assert.Equal(t, false, ch.TrySend(messages...))
 		assert.Equal(t,
 			messages[:buf],
 			slices.FromChan(ch.CloseAndRecv()),

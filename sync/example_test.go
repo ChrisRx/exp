@@ -49,7 +49,7 @@ func ExampleChan_reset() {
 func ExampleChan_send() {
 	ch := sync.NewChan[int](0)
 
-	sent := ch.Send(10) // will timeout
+	sent := ch.TrySend(10) // will timeout
 	time.Sleep(200 * time.Millisecond)
 	fmt.Println(sent)
 

@@ -117,8 +117,8 @@ func TestGroup(t *testing.T) {
 
 		ch := sync.NewChan[error](1)
 		defer ch.Close()
-		go func() { ch.Load() <- g.Wait() }()
-		go func() { ch.Load() <- g.Wait() }()
+		go func() { ch.Send(g.Wait()) }()
+		go func() { ch.Send(g.Wait()) }()
 		for _, err := range chans.CollectN(ch.Recv(), 2) {
 			assert.NoError(t, err)
 		}
