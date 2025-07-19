@@ -30,9 +30,9 @@ func Catch(err *error) {
 	if r := recover(); r != nil {
 		switch t := r.(type) {
 		case error:
-			*err = fmt.Errorf("panic: %w", t)
+			*err = t
 		default:
-			*err = fmt.Errorf("panic: %v", t)
+			*err = fmt.Errorf("%v", t)
 		}
 	}
 }
