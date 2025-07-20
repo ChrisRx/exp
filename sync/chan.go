@@ -4,6 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.chrisrx.dev/x/errors"
 	"go.chrisrx.dev/x/must"
 	"go.chrisrx.dev/x/ptr"
 	"go.chrisrx.dev/x/safe"
@@ -127,26 +128,44 @@ func (ch *Chan[T]) CloseAndRecv() <-chan T {
 	return makeClosedChannel[T]()
 }
 
-const sendTimeout = 100 * time.Millisecond
-
+// Send sends the provided messages on the stored channel. The messages are
+// sent sequentially in the order they are provided.
+//
+// Send has the same behavior expected as directly using a Go channel. If the
+// stored channel is unbuffered, calls to Send will block until a reader is
+// receives the message. A buffered channel will send immedidately up to the
+// available capacity.
+//
+// If the stored channel is uninitialized or closed, it returns immediately.
 func (ch *Chan[T]) Send(messages ...T) {
 	if v := ch.load(); v != nil {
+		defer must.Recover(
+			errors.RuntimeError("send on closed channel"),
+		)
 		for _, msg := range messages {
 			v <- msg
 		}
 	}
 }
 
-// Send attempts to send a value on the stored channel. If uninitialized or
-// closed, send returns immediately. It will wait for the value to be sent for
-// 100ms before returning. If the channel is closed while attempting to send a
-// value, the send on closed panic is recovered and logged.
+const sendTimeout = 100 * time.Millisecond
+
+// TrySend attempts to send a value on the stored channel. The messages are
+// sent sequentially in the order they are provided.
+//
+// Unlike [Chan.Send], it will wait for the value to be sent for 100ms before
+// returning. If the channel is closed while attempting to send a value, the
+// send on closed panic is recovered and logged.
+//
+// If the stored channel is uninitialized or closed, it returns immediately.
 func (ch *Chan[T]) TrySend(messages ...T) (sent bool) {
 	if v := ch.load(); v != nil {
 		t := time.NewTimer(sendTimeout)
 		defer t.Stop()
 
-		defer must.Recover()
+		defer must.Recover(
+			errors.RuntimeError("send on closed channel"),
+		)
 		for _, msg := range messages {
 			select {
 			case v <- msg:

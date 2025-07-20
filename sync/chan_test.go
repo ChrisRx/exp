@@ -102,4 +102,12 @@ func TestChan(t *testing.T) {
 			"send multiple values timeout",
 		)
 	})
+
+	t.Run("send on closed", func(t *testing.T) {
+		ch := sync.NewChan[int](0)
+		close(ch.Load())
+		assert.NotPanics(t, func() {
+			ch.Send(20)
+		})
+	})
 }

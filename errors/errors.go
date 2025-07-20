@@ -50,3 +50,12 @@ func Ignore(err error, ignored ...error) error {
 	}
 	return err
 }
+
+// RuntimeError is an error returned from the Go runtime.
+type RuntimeError string
+
+func (RuntimeError) RuntimeError() {}
+
+func (err RuntimeError) Error() string {
+	return string(err)
+}
