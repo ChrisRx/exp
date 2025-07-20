@@ -110,4 +110,14 @@ func TestChan(t *testing.T) {
 			ch.Send(20)
 		})
 	})
+
+	t.Run("load or new", func(t *testing.T) {
+		var ch sync.Chan[int]
+		v, isNew := ch.LoadOrNew()
+		assert.Equal(t, true, isNew)
+		go func() {
+			v <- 10
+		}()
+		assert.Equal(t, 10, <-ch.Recv())
+	})
 }

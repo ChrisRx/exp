@@ -19,5 +19,10 @@ func TestSend(t *testing.T) {
 	assert.PanicsWithError(t, "send on closed channel", func() {
 		ch <- 10
 	})
-	safe.Send(ch, 10)
+	var sent bool
+	safe.Send(func() {
+		ch <- 10
+		sent = true
+	})
+	assert.Equal(t, false, sent)
 }

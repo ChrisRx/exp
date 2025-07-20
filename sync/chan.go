@@ -4,8 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.chrisrx.dev/x/errors"
-	"go.chrisrx.dev/x/must"
+	"go.chrisrx.dev/x/chans"
 	"go.chrisrx.dev/x/ptr"
 	"go.chrisrx.dev/x/safe"
 )
@@ -115,15 +114,7 @@ func (ch *Chan[T]) Recv() <-chan T {
 // the remaining elements.
 func (ch *Chan[T]) CloseAndRecv() <-chan T {
 	if v := ch.load(); v != nil {
-		ch.Close()
-		results := make(chan T)
-		go func() {
-			defer close(results)
-			for elem := range v {
-				results <- elem
-			}
-		}()
-		return results
+		return chans.Drain(v)
 	}
 	return makeClosedChannel[T]()
 }
@@ -139,12 +130,11 @@ func (ch *Chan[T]) CloseAndRecv() <-chan T {
 // If the stored channel is uninitialized or closed, it returns immediately.
 func (ch *Chan[T]) Send(messages ...T) {
 	if v := ch.load(); v != nil {
-		defer must.Recover(
-			errors.RuntimeError("send on closed channel"),
-		)
-		for _, msg := range messages {
-			v <- msg
-		}
+		safe.Send(func() {
+			for _, msg := range messages {
+				v <- msg
+			}
+		})
 	}
 }
 
@@ -160,23 +150,22 @@ const sendTimeout = 100 * time.Millisecond
 // If the stored channel is uninitialized or closed, it returns immediately.
 func (ch *Chan[T]) TrySend(messages ...T) (sent bool) {
 	if v := ch.load(); v != nil {
-		t := time.NewTimer(sendTimeout)
-		defer t.Stop()
-
-		defer must.Recover(
-			errors.RuntimeError("send on closed channel"),
-		)
-		for _, msg := range messages {
-			select {
-			case v <- msg:
-				t.Reset(sendTimeout)
-			case <-t.C:
-				return false
+		safe.Send(func() {
+			t := time.NewTimer(sendTimeout)
+			defer t.Stop()
+			for _, msg := range messages {
+				select {
+				case v <- msg:
+					t.Reset(sendTimeout)
+				case <-t.C:
+					return
+				}
 			}
-		}
-		return true
+			sent = true
+		})
+		return
 	}
-	return false
+	return
 }
 
 func (ch *Chan[T]) load() chan T {

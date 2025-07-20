@@ -1,14 +1,8 @@
 package chans
 
-import "go.chrisrx.dev/x/safe"
-
-func Drain[T any](ch chan T) (s []T) {
-	safe.Close(ch)
-	for elem := range ch {
-		s = append(s, elem)
-	}
-	return
-}
+import (
+	"go.chrisrx.dev/x/safe"
+)
 
 func Collect[T any](ch <-chan T) (s []T) {
 	for elem := range ch {
@@ -27,4 +21,16 @@ func CollectN[T any](ch <-chan T, n int) (s []T) {
 		}
 	}
 	return
+}
+
+func Drain[T any](ch chan T) <-chan T {
+	safe.Close(ch)
+	out := make(chan T)
+	go func() {
+		defer close(out)
+		for elem := range ch {
+			out <- elem
+		}
+	}()
+	return out
 }
