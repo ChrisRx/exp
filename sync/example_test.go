@@ -173,8 +173,8 @@ func ExampleWaiter_reset() {
 	// done
 }
 
-func ExampleBoundedWaitGroup() {
-	var wg sync.BoundedWaitGroup
+func ExampleWaitGroup() {
+	var wg sync.WaitGroup
 	wg.SetLimit(2)
 
 	for range 5 {

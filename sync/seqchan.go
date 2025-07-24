@@ -4,8 +4,8 @@ import (
 	"iter"
 	"time"
 
-	"go.chrisrx.dev/x/must"
 	"go.chrisrx.dev/x/ptr"
+	"go.chrisrx.dev/x/safe"
 )
 
 // SeqChan wraps a [Chan], providing Send/Recv methods that operate on iterator
@@ -21,24 +21,36 @@ func NewSeqChan[T any](capacity int) *SeqChan[T] {
 	}
 }
 
-// SendSeq attempts to send a sequence of values on the stored channel.
-func (s *SeqChan[T]) Send(seq iter.Seq[T]) (sent bool) {
-	if v := s.load(); v != nil {
-		t := time.NewTimer(sendTimeout)
-		defer t.Stop()
-
-		defer must.Recover()
-		for msg := range seq {
-			select {
-			case v <- msg:
-				t.Reset(sendTimeout)
-			case <-t.C:
-				return false
+// Send works like [Chan.Send] but accepts a sequence of values.
+func (ch *SeqChan[T]) Send(seq iter.Seq[T]) {
+	if v := ch.load(); v != nil {
+		safe.Send(func() {
+			for msg := range seq {
+				v <- msg
 			}
-		}
-		return true
+		})
 	}
-	return false
+}
+
+// TrySend attempts to send a sequence of values on the stored channel.
+func (s *SeqChan[T]) TrySend(seq iter.Seq[T]) (sent bool) {
+	if v := s.load(); v != nil {
+		safe.Send(func() {
+			t := time.NewTimer(sendTimeout)
+			defer t.Stop()
+			for msg := range seq {
+				select {
+				case v <- msg:
+					t.Reset(sendTimeout)
+				case <-t.C:
+					return
+				}
+			}
+			sent = true
+		})
+		return
+	}
+	return
 }
 
 // RecvSeq reads values from the stored channel and returns as an iterator.

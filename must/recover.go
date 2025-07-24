@@ -3,10 +3,10 @@ package must
 import (
 	"fmt"
 	"log/slog"
+	"runtime"
 	"strings"
 
 	"go.chrisrx.dev/x/cmp"
-	"go.chrisrx.dev/x/constraints"
 	"go.chrisrx.dev/x/errors"
 	"go.chrisrx.dev/x/stack"
 )
@@ -33,7 +33,7 @@ func Recover(errs ...error) {
 		}
 
 		switch v := r.(type) {
-		case constraints.RuntimeError:
+		case runtime.Error:
 			// There are runtime errors that aren't public that can be differentiated
 			// by interface. These should be compared by error string value instead
 			// of using [errors.Is].

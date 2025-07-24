@@ -32,6 +32,21 @@ func (l *LazyChan[T]) Load() chan T {
 	return l.Chan.Load()
 }
 
+func (l *LazyChan[T]) Send(messages ...T) {
+	l.init()
+	l.Chan.Send(messages...)
+}
+
+func (l *LazyChan[T]) TrySend(messages ...T) (sent bool) {
+	l.init()
+	return l.Chan.TrySend(messages...)
+}
+
+func (l *LazyChan[T]) Recv() <-chan T {
+	l.init()
+	return l.Chan.Recv()
+}
+
 func (l *LazyChan[T]) init() {
 	l.once.Do(func() {
 		l.Reset()

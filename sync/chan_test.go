@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"go.chrisrx.dev/x/chans"
 	"go.chrisrx.dev/x/slices"
 	"go.chrisrx.dev/x/sync"
 )
@@ -98,7 +99,7 @@ func TestChan(t *testing.T) {
 		assert.Equal(t, false, ch.TrySend(messages...))
 		assert.Equal(t,
 			messages[:buf],
-			slices.FromChan(ch.CloseAndRecv()),
+			chans.Collect(ch.CloseAndRecv()),
 			"send multiple values timeout",
 		)
 	})

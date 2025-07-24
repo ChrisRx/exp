@@ -4,31 +4,31 @@ import (
 	"sync"
 )
 
-// A BoundedWaitGroup works like a [sync.WaitGroup] with a semaphore that
-// limits concurrency.
-type BoundedWaitGroup struct {
+// A WaitGroup works like a [sync.WaitGroup] with a semaphore that limits
+// concurrency.
+type WaitGroup struct {
 	limit Semaphore
 	wg    sync.WaitGroup
 }
 
 // Add adds delta, which may be negative, to the [WaitGroup] counter.
-func (w *BoundedWaitGroup) Add(delta int) {
+func (w *WaitGroup) Add(delta int) {
 	w.limit.Acquire(delta)
 	w.wg.Add(delta)
 }
 
 // Done decrements the [WaitGroup] counter by one.
-func (w *BoundedWaitGroup) Done() {
+func (w *WaitGroup) Done() {
 	w.limit.Release()
 	w.wg.Done()
 }
 
 // SetLimit sets the bounds for concurrency to the provided value.
-func (w *BoundedWaitGroup) SetLimit(n int) {
+func (w *WaitGroup) SetLimit(n int) {
 	w.limit.SetLimit(n)
 }
 
 // Wait blocks until the [WaitGroup] counter is zero.
-func (w *BoundedWaitGroup) Wait() {
+func (w *WaitGroup) Wait() {
 	w.wg.Wait()
 }

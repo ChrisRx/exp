@@ -8,7 +8,7 @@ import (
 
 type Set[K comparable] struct {
 	m    map[K]struct{}
-	once sync.OnceAgain
+	once sync.Once
 }
 
 func (s *Set[K]) Add(v K) {

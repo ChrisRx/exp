@@ -6,26 +6,26 @@ import (
 	"go.chrisrx.dev/x/safe"
 )
 
-// OnceAgain is a resettable version of [sync.Once].
-type OnceAgain struct {
+// Once is a resettable version of [sync.Once].
+type Once struct {
 	_ safe.NoCopy
 
 	done atomic.Bool
 	m    Mutex
 }
 
-func (o *OnceAgain) Do(f func()) {
+func (o *Once) Do(f func()) {
 	if !o.done.Load() {
 		o.doSlow(f)
 	}
 }
 
 // Reset resets the finished state, allowing reuse.
-func (o *OnceAgain) Reset() {
+func (o *Once) Reset() {
 	o.done.Store(false)
 }
 
-func (o *OnceAgain) doSlow(f func()) {
+func (o *Once) doSlow(f func()) {
 	o.m.Lock()
 	defer o.m.Unlock()
 	if !o.done.Load() {

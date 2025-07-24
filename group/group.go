@@ -13,11 +13,11 @@ type Group struct {
 	ctx    context.Context
 	cancel context.CancelCauseFunc
 
-	wg    sync.BoundedWaitGroup
+	wg    sync.WaitGroup
 	done  sync.Chan[error]
 	ready sync.Waiter
 
-	once sync.OnceAgain
+	once sync.Once
 	err  error
 }
 

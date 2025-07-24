@@ -3,7 +3,7 @@ package sync
 // A Waiter uses a [LazyChan] to wait for an event to occur.
 type Waiter struct {
 	ch   LazyChan[struct{}]
-	done OnceAgain
+	done Once
 }
 
 // Done sends a done signal for any waiters currently blocked.
@@ -22,5 +22,9 @@ func (w *Waiter) Reset() {
 
 // Wait blocks until receiving a done signal.
 func (w *Waiter) Wait() {
-	<-w.ch.Load()
+	<-w.C()
+}
+
+func (w *Waiter) C() <-chan struct{} {
+	return w.ch.Load()
 }
