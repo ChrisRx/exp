@@ -75,7 +75,9 @@ func (g *Group) Done() <-chan error {
 	if isNew {
 		go func() {
 			defer g.done.Close()
-			done <- g.Wait()
+			if err := g.Wait(); err != nil {
+				done <- err
+			}
 		}()
 	}
 	return done

@@ -67,7 +67,7 @@ func (r *ResultGroup[T]) Get() iter.Seq2[T, error] {
 	}()
 
 	return func(yield func(T, error) bool) {
-		for result := range r.results.Load() {
+		for result := range r.results.Recv() {
 			if !yield(result.Get()) {
 				return
 			}

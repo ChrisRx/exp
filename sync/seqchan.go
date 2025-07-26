@@ -22,8 +22,8 @@ func NewSeqChan[T any](capacity int) *SeqChan[T] {
 }
 
 // Send works like [Chan.Send] but accepts a sequence of values.
-func (ch *SeqChan[T]) Send(seq iter.Seq[T]) {
-	if v := ch.load(); v != nil {
+func (s *SeqChan[T]) Send(seq iter.Seq[T]) {
+	if v := s.load(); v != nil {
 		safe.Send(func() {
 			for msg := range seq {
 				v <- msg

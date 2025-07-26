@@ -1,14 +1,10 @@
 package sync
 
-import (
-	"sync"
-)
-
 // LazyChan wraps a [Chan], initializing lazily upon initial access.
 type LazyChan[T any] struct {
 	Chan[T]
 
-	once sync.Once
+	once Once
 }
 
 // Close closes the current channel, if present. The stored value is replaced
