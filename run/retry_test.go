@@ -22,7 +22,7 @@ func TestRetry(t *testing.T) {
 		var n int
 		run.Retry(ctx, func() error {
 			return fmt.Errorf("continue")
-		}, &run.RetryOptions{
+		}, run.RetryOptions{
 			InitialInterval: 10 * time.Millisecond,
 			MaxAttempts:     maxAttempts,
 		}).Range(func(attempt int, err error) {
@@ -37,7 +37,7 @@ func TestRetry(t *testing.T) {
 		var n int
 		for attempts, err := range run.Retry(ctx, func() error {
 			return fmt.Errorf("continue")
-		}, &run.RetryOptions{
+		}, run.RetryOptions{
 			InitialInterval: 10 * time.Millisecond,
 			MaxAttempts:     5,
 		}) {
@@ -56,7 +56,7 @@ func TestRetry(t *testing.T) {
 		var n int
 		for attempts, err := range run.Retry(ctx, func() error {
 			panic("something real bad happened")
-		}, &run.RetryOptions{
+		}, run.RetryOptions{
 			InitialInterval: 10 * time.Millisecond,
 			MaxAttempts:     5,
 		}) {

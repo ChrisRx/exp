@@ -7,7 +7,7 @@ import (
 )
 
 type Interval interface {
-	time.Duration | *RetryOptions
+	time.Duration | RetryOptions
 }
 
 type RetryFunc interface {
@@ -27,7 +27,7 @@ type error_ = error
 // interval provided. If Every returns early, the last error (if any) will be
 // returned.
 func Every[R RetryFunc, T Interval](ctx context.Context, fn R, interval T) error_ {
-	return Retry(ctx, asRetryFunc(fn), newRetryOptions(interval)).WaitE()
+	return Retry(ctx, asRetryFunc(fn), retryOptionsFromInterval(interval)).WaitE()
 }
 
 // Until runs a function periodically for the provided interval. This is used
@@ -44,17 +44,17 @@ func Every[R RetryFunc, T Interval](ctx context.Context, fn R, interval T) error
 // interval provided. If Until returns early, the last error (if any) will be
 // returned.
 func Until[R RetryFunc, T Interval](ctx context.Context, fn R, interval T) error_ {
-	return Retry(ctx, asRetryFunc(fn), newRetryOptions(interval)).WaitE()
+	return Retry(ctx, asRetryFunc(fn), retryOptionsFromInterval(interval)).WaitE()
 }
 
-func newRetryOptions[T Interval](interval T) *RetryOptions {
+func retryOptionsFromInterval[T Interval](interval T) RetryOptions {
 	switch t := any(interval).(type) {
 	case time.Duration:
-		return &RetryOptions{
+		return RetryOptions{
 			InitialInterval: t,
 		}
 	case RetryOptions:
-		return &t
+		return t
 	default:
 		panic("unreachable")
 	}

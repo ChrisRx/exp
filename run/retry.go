@@ -4,21 +4,10 @@ import (
 	"context"
 	"fmt"
 	"iter"
-	"sync"
 	"time"
 
-	"github.com/cenkalti/backoff/v5"
-	"github.com/samber/lo"
-
-	"go.chrisrx.dev/x/ptr"
-)
-
-const (
-	DefaultInitialInterval     = backoff.DefaultInitialInterval
-	DefaultMaxAttempts         = 10
-	DefaultMaxInterval         = backoff.DefaultMaxInterval
-	DefaultMultiplier          = backoff.DefaultMultiplier
-	DefaultRandomizationFactor = backoff.DefaultRandomizationFactor
+	"go.chrisrx.dev/x/backoff"
+	"go.chrisrx.dev/x/cmp"
 )
 
 type RetryOptions struct {
@@ -29,73 +18,53 @@ type RetryOptions struct {
 	Multiplier          float64
 	RandomizationFactor float64
 
-	once sync.Once
-	b    BackOff
+	b backoff.Backoff
 }
 
 func DefaultRetryOptions() RetryOptions {
 	return RetryOptions{
-		InitialInterval:     DefaultInitialInterval,
-		RandomizationFactor: DefaultRandomizationFactor,
-		Multiplier:          DefaultMultiplier,
-		MaxInterval:         DefaultMaxInterval,
-		MaxAttempts:         DefaultMaxAttempts,
+		InitialInterval: backoff.DefaultMinInterval,
+		Multiplier:      backoff.DefaultMultiplier,
+		MaxInterval:     backoff.DefaultMaxInterval,
+		MaxAttempts:     5,
 	}
 }
 
-func (ro *RetryOptions) init() {
+func (ro *RetryOptions) Backoff() backoff.Backoff {
 	switch {
 	case ro.InitialInterval != 0 && ro.MaxInterval == 0:
-		ro.b = NewConstantBackOff(ro.InitialInterval)
+		ro.b.MinInterval = ro.InitialInterval
+		ro.b.MaxInterval = ro.InitialInterval
 	case ro.InitialInterval != 0 && ro.MaxInterval != 0 && ro.InitialInterval == ro.MaxInterval:
-		ro.b = NewConstantBackOff(ro.InitialInterval)
+		ro.b.MinInterval = ro.InitialInterval
+		ro.b.MaxInterval = ro.InitialInterval
 	default:
-		ro.b = &ExponentialBackOff{
-			InitialInterval:     lo.CoalesceOrEmpty(ro.InitialInterval, DefaultInitialInterval),
-			RandomizationFactor: lo.CoalesceOrEmpty(ro.RandomizationFactor, DefaultRandomizationFactor),
-			Multiplier:          lo.CoalesceOrEmpty(ro.Multiplier, DefaultMultiplier),
-			MaxInterval:         lo.CoalesceOrEmpty(ro.MaxInterval, DefaultMaxInterval),
-		}
+		ro.b.MinInterval = cmp.Or(ro.InitialInterval, backoff.DefaultMinInterval)
+		ro.b.MaxInterval = cmp.Or(ro.MaxInterval, backoff.DefaultMaxInterval)
+		ro.b.Multiplier = cmp.Or(ro.Multiplier, backoff.DefaultMultiplier)
 	}
-}
-
-func (ro *RetryOptions) NextBackOff() time.Duration {
-	return ro.BackOff().NextBackOff()
-}
-
-func (ro *RetryOptions) BackOff() BackOff {
-	ro.once.Do(ro.init)
 	return ro.b
 }
 
 func (ro *RetryOptions) Reset() {
-	ro.BackOff().Reset()
-}
-
-func (ro *RetryOptions) Options() RetryOptions {
-	return ptr.From(ro)
-}
-
-type Options interface {
-	BackOff
-	Options() RetryOptions
+	ro.b.Reset()
 }
 
 // Retry runs a function periodically based on the provided [Options].
-func Retry(ctx context.Context, fn func() error, ro Options) RetryIterator {
+func Retry(ctx context.Context, fn func() error, ro RetryOptions) RetryIterator {
 	var attempts int
 	return func(yield func(attempts int, err error) bool) {
-		if ro.Options().MaxElapsedTime != 0 {
+		if ro.MaxElapsedTime != 0 {
 			var cancel context.CancelFunc
-			ctx, cancel = context.WithTimeout(ctx, ro.Options().MaxElapsedTime)
+			ctx, cancel = context.WithTimeout(ctx, ro.MaxElapsedTime)
 			defer cancel()
 		}
-		ticker := backoff.NewTicker(ro)
+		ticker := backoff.NewTicker(ro.Backoff())
 		defer ticker.Stop()
 
 		for {
 			select {
-			case <-ticker.C:
+			case <-ticker.Next():
 				attempts++
 				if err := func() (reterr error) {
 					defer func() {
@@ -113,7 +82,7 @@ func Retry(ctx context.Context, fn func() error, ro Options) RetryIterator {
 					if !yield(attempts, err) {
 						return
 					}
-					if ro.Options().MaxAttempts != 0 && attempts >= ro.Options().MaxAttempts {
+					if ro.MaxAttempts != 0 && attempts >= ro.MaxAttempts {
 						return
 					}
 					continue

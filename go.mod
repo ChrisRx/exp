@@ -4,7 +4,6 @@ go 1.23.4
 
 require (
 	github.com/caarlos0/env/v11 v11.3.1
-	github.com/cenkalti/backoff/v5 v5.0.2
 	github.com/samber/lo v1.49.1
 	github.com/stretchr/testify v1.10.0
 )

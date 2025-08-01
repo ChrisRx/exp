@@ -26,8 +26,10 @@ type Set[T any] struct {
 	once sync.Once
 }
 
+// New constructs a new set. If any elements are provided the set is
+// initialized with those values.
 func New[T any](elems ...T) *Set[T] {
-	s := &Set[T]{}
+	s := new(Set[T])
 	s.init()
 	for _, elem := range elems {
 		s.hs.add(elem)
