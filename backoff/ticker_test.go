@@ -1,23 +1,20 @@
 package backoff
 
 import (
-	"context"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestTicker(t *testing.T) {
-	var ticker Ticker
-	defer ticker.Stop()
-
-	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
-	defer cancel()
-
-	for {
-		select {
-		case <-ticker.Next():
-		case <-ctx.Done():
-			return
+	t.Run("zero", func(t *testing.T) {
+		var ticker Ticker
+		last := time.Now()
+		for _, d := range getExpectedDurations(Backoff{}, 4) {
+			next := <-ticker.Next()
+			assert.WithinDuration(t, last.Add(d), next, 10*time.Millisecond)
+			last = next
 		}
-	}
+	})
 }
