@@ -4,8 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
+	"go.chrisrx.dev/x/assert"
 	"go.chrisrx.dev/x/ptr"
 )
 
@@ -53,7 +52,7 @@ func TestIsZero(t *testing.T) {
 	}
 	for _, tt := range cases {
 		result := ptr.IsZero(tt.input)
-		assert.EqualValues(t, tt.expected, result, tt.name)
+		assert.Equal(t, tt.expected, result, tt.name)
 	}
 }
 

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"go.chrisrx.dev/x/assert"
 )
 
 func TestSet(t *testing.T) {

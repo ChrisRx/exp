@@ -6,8 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-
+	"go.chrisrx.dev/x/assert"
 	"go.chrisrx.dev/x/chans"
 	"go.chrisrx.dev/x/group"
 	"go.chrisrx.dev/x/sync"
@@ -99,7 +98,7 @@ func TestGroup(t *testing.T) {
 				return nil
 			})
 		}
-		assert.ErrorIs(t, g.Wait(), context.DeadlineExceeded)
+		assert.ErrorIs(t, context.DeadlineExceeded, g.Wait())
 		assert.Equal(t, n+1, int(done.Load()))
 	})
 

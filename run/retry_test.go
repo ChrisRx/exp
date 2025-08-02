@@ -7,8 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-
+	"go.chrisrx.dev/x/assert"
 	"go.chrisrx.dev/x/run"
 )
 

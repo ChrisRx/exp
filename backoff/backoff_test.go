@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
+	"go.chrisrx.dev/x/assert"
 )
 
 func TestBackoff(t *testing.T) {
@@ -22,7 +22,7 @@ func TestBackoff(t *testing.T) {
 			{Multiplier: -1},
 		}
 		for _, tc := range cases {
-			assert.PanicsWithValue(t, "cannot provide negative values for backoff", func() {
+			assert.Panics(t, "cannot provide negative values for backoff", func() {
 				tc.Next()
 			})
 		}

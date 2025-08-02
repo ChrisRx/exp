@@ -4,8 +4,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
+	"go.chrisrx.dev/x/assert"
 	"go.chrisrx.dev/x/slices"
 )
 

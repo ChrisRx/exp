@@ -4,8 +4,7 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/stretchr/testify/assert"
-
+	"go.chrisrx.dev/x/assert"
 	"go.chrisrx.dev/x/chans"
 	"go.chrisrx.dev/x/slices"
 	"go.chrisrx.dev/x/sync"
@@ -80,7 +79,7 @@ func TestChan(t *testing.T) {
 		assert.Equal(t, 10, <-ch.Recv())
 		ch.Close()
 		assert.Equal(t, true, ch.Closed())
-		assert.PanicsWithError(t, "send on closed channel", func() {
+		assert.Panics(t, "send on closed channel", func() {
 			ch.Load() <- 10
 		})
 	})
@@ -107,7 +106,7 @@ func TestChan(t *testing.T) {
 	t.Run("send on closed", func(t *testing.T) {
 		ch := sync.NewChan[int](0)
 		close(ch.Load())
-		assert.NotPanics(t, func() {
+		assert.NoPanics(t, func() {
 			ch.Send(20)
 		})
 	})

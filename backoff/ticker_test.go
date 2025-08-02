@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
+	"go.chrisrx.dev/x/assert"
 )
 
 func TestTicker(t *testing.T) {
