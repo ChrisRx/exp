@@ -16,7 +16,7 @@ func TestClose(t *testing.T) {
 func TestSend(t *testing.T) {
 	ch := make(chan int)
 	close(ch)
-	assert.Panics(t, "send on closed channel", func() {
+	assert.Panic(t, "send on closed channel", func() {
 		ch <- 10
 	})
 	var sent bool

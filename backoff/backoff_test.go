@@ -22,7 +22,7 @@ func TestBackoff(t *testing.T) {
 			{Multiplier: -1},
 		}
 		for _, tc := range cases {
-			assert.Panics(t, "cannot provide negative values for backoff", func() {
+			assert.Panic(t, "cannot provide negative values for backoff", func() {
 				tc.Next()
 			})
 		}

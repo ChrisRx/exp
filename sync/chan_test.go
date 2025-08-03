@@ -79,7 +79,7 @@ func TestChan(t *testing.T) {
 		assert.Equal(t, 10, <-ch.Recv())
 		ch.Close()
 		assert.Equal(t, true, ch.Closed())
-		assert.Panics(t, "send on closed channel", func() {
+		assert.Panic(t, "send on closed channel", func() {
 			ch.Load() <- 10
 		})
 	})
@@ -106,7 +106,7 @@ func TestChan(t *testing.T) {
 	t.Run("send on closed", func(t *testing.T) {
 		ch := sync.NewChan[int](0)
 		close(ch.Load())
-		assert.NoPanics(t, func() {
+		assert.NoPanic(t, func() {
 			ch.Send(20)
 		})
 	})

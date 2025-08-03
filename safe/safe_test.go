@@ -11,9 +11,9 @@ import (
 var errPanic = errors.New("do panic")
 
 func TestDo(t *testing.T) {
-	assert.ErrorIs(t, safe.Do(func() {}), nil)
+	assert.Error(t, safe.Do(func() {}), nil)
 	err := safe.Do(func() {
 		panic(errPanic)
 	})
-	assert.ErrorIs(t, err, errPanic)
+	assert.Error(t, err, errPanic)
 }

@@ -98,7 +98,7 @@ func TestGroup(t *testing.T) {
 				return nil
 			})
 		}
-		assert.ErrorIs(t, context.DeadlineExceeded, g.Wait())
+		assert.Error(t, context.DeadlineExceeded, g.Wait())
 		assert.Equal(t, n+1, int(done.Load()))
 	})
 

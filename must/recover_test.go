@@ -10,7 +10,7 @@ import (
 
 func TestCatch(t *testing.T) {
 	expected := errors.New("caught error")
-	assert.ErrorIs(t, expected, func() (err error) {
+	assert.Error(t, expected, func() (err error) {
 		defer must.Catch(&err)
 		panic(expected)
 	}())
