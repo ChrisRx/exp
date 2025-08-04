@@ -11,93 +11,6 @@ import (
 	"time"
 )
 
-var seed = maphash.MakeSeed()
-
-func hash(v any) uint64 {
-	h := new(maphash.Hash)
-	h.SetSeed(seed)
-	_, _ = fmt.Fprint(h, v)
-	return h.Sum64()
-}
-
-func equal(a, b any, opts ...Option) bool {
-	o := &options{}
-	for _, opt := range opts {
-		opt(o)
-	}
-	return hash(a) == hash(b)
-}
-
-// assert is going to be used in pretty much every package so it needs to copy
-// code that might exist in those packages already to prevent an import cycle.
-func Map[T any, R any](col []T, fn func(elem T) R) []R {
-	results := make([]R, len(col))
-	for i, v := range col {
-		results[i] = fn(v)
-	}
-	return results
-}
-
-func contains[S ~[]E, E any](s S, v E) bool {
-	return slices.Contains(Map(s, func(elem E) uint64 {
-		return hash(elem)
-	}), hash(v))
-}
-
-func print(v any) string {
-	rv := reflect.Indirect(reflect.ValueOf(v))
-
-	var sb strings.Builder
-	switch rv.Kind() {
-	// case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32,
-	// 	reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16,
-	// 	reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64,
-	// 	reflect.Complex64, reflect.Complex128:
-	// case reflect.Chan, reflect.Map:
-	case reflect.Struct:
-		sb.WriteString(rv.Type().String())
-		sb.WriteString("{\n")
-		for i := range rv.NumField() {
-			ft := rv.Type().Field(i)
-			fv := rv.Field(i)
-			if fv.CanInterface() {
-				sb.WriteString(fmt.Sprintf("\t%s: %v,\n", ft.Name, fv.Interface()))
-			}
-		}
-		sb.WriteString("}")
-		return sb.String()
-	case reflect.Array, reflect.Slice:
-		sb.WriteString(fmt.Sprintf("[]%s{", rv.Type().String()))
-		for i := range rv.Len() {
-			sb.WriteString(print(rv.Index(i).Interface()))
-			sb.WriteString("\n")
-		}
-		sb.WriteString("}")
-		return sb.String()
-	default:
-		return fmt.Sprint(v)
-	}
-}
-
-func Diff(a, b any) string {
-	ra := reflect.ValueOf(a)
-	rb := reflect.ValueOf(b)
-
-	var sb strings.Builder
-	sb.WriteString("expected:\n\t")
-	if ra.Kind() == reflect.Struct {
-		sb.WriteString(ra.Type().String())
-	}
-	fmt.Fprint(&sb, a)
-	sb.WriteString("\n")
-	sb.WriteString("actual:\n\t")
-	if ra.Kind() == reflect.Struct {
-		sb.WriteString(rb.Type().String())
-	}
-	fmt.Fprint(&sb, b)
-	return sb.String()
-}
-
 func compare(x, y any) int {
 	rx := reflect.ValueOf(x)
 	ry := reflect.ValueOf(y)
@@ -123,6 +36,29 @@ func compare(x, y any) int {
 	}
 }
 
+func equal(a, b any, opts ...Option) bool {
+	o := &options{}
+	for _, opt := range opts {
+		opt(o)
+	}
+	return hash(a) == hash(b)
+}
+
+var seed = maphash.MakeSeed()
+
+func hash(v any) uint64 {
+	h := new(maphash.Hash)
+	h.SetSeed(seed)
+	_, _ = fmt.Fprint(h, v)
+	return h.Sum64()
+}
+
+func contains[S ~[]E, E any](s S, v E) bool {
+	return slices.Contains(imap(s, func(elem E) uint64 {
+		return hash(elem)
+	}), hash(v))
+}
+
 func isTime(v reflect.Value) bool {
 	return v.Type().PkgPath() == "time" && v.Type().Name() == "Time"
 }
@@ -135,7 +71,15 @@ func isComparable(v any) bool {
 	return rv.Comparable()
 }
 
-func newMatcher(s string) (func(string) bool, error) {
+func isZero(v any) bool {
+	rv := reflect.ValueOf(v)
+	if !rv.IsValid() {
+		return true
+	}
+	return reflect.Indirect(rv).IsZero()
+}
+
+func newMatcherFunc(s string) (func(string) bool, error) {
 	if s == "" {
 		return func(s string) bool {
 			return s == ""

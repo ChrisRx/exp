@@ -42,14 +42,12 @@ func TestAssert(t *testing.T) {
 	})
 
 	t.Run("Panic", func(t *testing.T) {
+		ch := make(chan struct{})
+		close(ch)
 		assert.Panic(t, "send on closed channel", func() {
-			ch := make(chan struct{})
-			close(ch)
 			ch <- struct{}{}
 		})
-		assert.Panic(NoFatal(t), "send on closed channe", func() {
-			ch := make(chan struct{})
-			close(ch)
+		assert.Panic(NoFatal(t), "some other panic", func() {
 			ch <- struct{}{}
 		})
 		assert.Panic(NoFatal(t), nil, func() {})
@@ -74,6 +72,7 @@ func TestAssert(t *testing.T) {
 
 	t.Run("WithinDuration", func(t *testing.T) {
 		var now time.Time
+		assert.WithinDuration(t, now, now.Add(100*time.Millisecond), 100*time.Millisecond)
 		assert.WithinDuration(NoFatal(t), now, now.Add(101*time.Millisecond), 100*time.Millisecond)
 	})
 
@@ -81,6 +80,10 @@ func TestAssert(t *testing.T) {
 		var now time.Time
 		assert.Between(t, now.Add(-time.Hour), now.Add(time.Hour), now.Add(1*time.Hour))
 		assert.Between(NoFatal(t), now.Add(-time.Hour), now.Add(time.Hour), now.Add(2*time.Hour))
-		assert.Between(NoFatal(t), 5, 10, 18)
+		assert.Between(NoFatal(t), 5, 10, 5)
+		assert.Between(NoFatal(t), 5, 10, 8)
+		assert.Between(NoFatal(t), 5, 10, 10)
+		assert.Between(NoFatal(t), 5, 10, 4)
+		assert.Between(NoFatal(t), 5, 10, 11)
 	})
 }
