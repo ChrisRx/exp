@@ -6,9 +6,11 @@ import (
 	"hash/maphash"
 	"reflect"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
+
+	"go.chrisrx.dev/x/assert/internal/diff"
+	"go.chrisrx.dev/x/assert/internal/slices"
 )
 
 func compare(x, y any) int {
@@ -24,7 +26,7 @@ func compare(x, y any) int {
 		if isTime(rx) {
 			return time.Time.Compare(rx.Interface().(time.Time), ry.Interface().(time.Time))
 		}
-		fallthrough
+		return -2
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return cmp.Compare(rx.Int(), ry.Int())
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
@@ -54,13 +56,17 @@ func hash(v any) uint64 {
 }
 
 func contains[S ~[]E, E any](s S, v E) bool {
-	return slices.Contains(imap(s, func(elem E) uint64 {
+	return slices.Contains(slices.Map(s, func(elem E) uint64 {
 		return hash(elem)
 	}), hash(v))
 }
 
 func isTime(v reflect.Value) bool {
 	return v.Type().PkgPath() == "time" && v.Type().Name() == "Time"
+}
+
+func isDuration(v reflect.Value) bool {
+	return v.Type().PkgPath() == "time" && v.Type().Name() == "Duration"
 }
 
 func isComparable(v any) bool {
@@ -100,4 +106,8 @@ func newMatcherFunc(s string) (func(string) bool, error) {
 	return func(s string) bool {
 		return re.MatchString(s)
 	}, nil
+}
+
+func Diff[T any](expected, actual T) []byte {
+	return diff.Diff([]byte(Sprint(expected)), []byte(Sprint(actual)))
 }

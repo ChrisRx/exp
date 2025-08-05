@@ -4,10 +4,11 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"go.chrisrx.dev/x/assert/internal/slices"
 )
 
 func Equal[T any](tb testing.TB, expected, actual T, args ...any) {
@@ -16,11 +17,9 @@ func Equal[T any](tb testing.TB, expected, actual T, args ...any) {
 	}
 
 	tb.Helper()
-
 	Fatal(tb, Message{
-		Header:   header("not equal", args),
-		Expected: print(expected),
-		Actual:   print(actual),
+		Header: header("not equal", args),
+		Diff:   Diff(expected, actual),
 	})
 }
 
@@ -33,7 +32,6 @@ func Panic(tb testing.TB, expected any, fn func(), args ...any) {
 
 	if !isZero(expected) && r == nil {
 		tb.Helper()
-
 		Fatal(tb, Message{
 			Header:   header("expected panic", args),
 			Expected: expected,
@@ -45,7 +43,6 @@ func Panic(tb testing.TB, expected any, fn func(), args ...any) {
 	}
 
 	tb.Helper()
-
 	Fatal(tb, Message{
 		Header:   header("unexpected panic", args),
 		Expected: cmp.Or(expected, "<nil>"),
@@ -55,7 +52,6 @@ func Panic(tb testing.TB, expected any, fn func(), args ...any) {
 
 func NoPanic(tb testing.TB, fn func(), args ...any) {
 	tb.Helper()
-
 	Panic(tb, nil, fn, args...)
 }
 
@@ -66,7 +62,6 @@ func Error(tb testing.TB, expected any, actual error, args ...any) bool {
 		}
 
 		tb.Helper()
-
 		Fatal(tb, Message{
 			Header:   header("unexpected error", args),
 			Expected: expected,
@@ -82,10 +77,9 @@ func Error(tb testing.TB, expected any, actual error, args ...any) bool {
 		}
 
 		tb.Helper()
-
 		Fatal(tb, Message{
 			Header: header("unexpected error", args),
-			Expected: strings.Join(imap(unwrap(expected), func(elem error) string {
+			Expected: strings.Join(slices.Map(unwrap(expected), func(elem error) string {
 				return elem.Error()
 			}), "\n"),
 			Actual: actual,
@@ -99,7 +93,6 @@ func Error(tb testing.TB, expected any, actual error, args ...any) bool {
 		}
 
 		tb.Helper()
-
 		if fn(actual.Error()) {
 			return true
 		}
@@ -117,7 +110,6 @@ func Error(tb testing.TB, expected any, actual error, args ...any) bool {
 
 func NoError(tb testing.TB, actual error, args ...any) bool {
 	tb.Helper()
-
 	return Error(tb, nil, actual, args...)
 }
 
@@ -126,10 +118,10 @@ func ElementsMatch[T any](tb testing.TB, expected, actual []T, args ...any) bool
 		return true
 	}
 
-	missing := filter(expected, func(elem T) bool {
+	missing := slices.Filter(expected, func(elem T) bool {
 		return !contains(actual, elem)
 	})
-	added := filter(actual, func(elem T) bool {
+	added := slices.Filter(actual, func(elem T) bool {
 		return !contains(expected, elem)
 	})
 
@@ -138,14 +130,13 @@ func ElementsMatch[T any](tb testing.TB, expected, actual []T, args ...any) bool
 	}
 
 	tb.Helper()
-
 	Fatal(tb, Message{
 		Header: header("elements do not match", args),
 		Elements: slices.Concat(
-			imap(missing, func(elem T) any {
+			slices.Map(missing, func(elem T) any {
 				return fmt.Sprintf("- (%[1]T)(%[1]v)", elem)
 			}),
-			imap(added, func(elem T) any {
+			slices.Map(added, func(elem T) any {
 				return fmt.Sprintf("+ (%[1]T)(%[1]v)", elem)
 			}),
 		),
@@ -163,7 +154,6 @@ func Between(tb testing.TB, start, end, actual any, args ...any) {
 	}
 
 	tb.Helper()
-
 	Fatal(tb, Message{
 		Header:   header("not between", args),
 		Expected: fmt.Sprintf("%s <-> %v", format(start), format(end)),
@@ -177,7 +167,6 @@ func WithinDuration(tb testing.TB, expected, actual time.Time, delta time.Durati
 	}
 
 	tb.Helper()
-
 	Fatal(tb, Message{
 		Header:   header("not within expected delta", args),
 		Expected: fmt.Sprintf("%v ±%v", format(expected), delta),
@@ -229,24 +218,4 @@ func unwrap(err error) (errs []error) {
 	default:
 		return errs
 	}
-}
-
-// assert is going to be used in pretty much every package so it needs to copy
-// code that might exist in those packages already to prevent an import cycle.
-func imap[T any, R any](col []T, fn func(elem T) R) []R {
-	results := make([]R, len(col))
-	for i, v := range col {
-		results[i] = fn(v)
-	}
-	return results
-}
-
-func filter[T any](col []T, fn func(elem T) bool) []T {
-	results := make([]T, 0)
-	for _, v := range col {
-		if fn(v) {
-			results = append(results, v)
-		}
-	}
-	return results
 }

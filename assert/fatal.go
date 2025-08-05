@@ -13,6 +13,7 @@ type Message struct {
 	Expected any
 	Actual   any
 	Elements []any
+	Diff     []byte
 }
 
 func Fatal(tb testing.TB, msg Message) {
@@ -29,6 +30,9 @@ var failureMessage = template.Must(template.New("").Funcs(map[string]any{
 		pad := strings.Repeat(" ", spaces)
 		return pad + strings.ReplaceAll(fmt.Sprint(v), "\n", "\n"+pad)
 	},
+	"string": func(v []byte) string {
+		return string(v)
+	},
 }).Parse(`
 {{- .Header }}
 {{- with .Expected }}
@@ -41,5 +45,8 @@ actual:
 {{- end -}}
 {{- range .Elements }}
 	{{ . }}
+{{- end -}}
+{{- with .Diff }}
+{{ . | string | indent 4 }}
 {{- end -}}
 `))
