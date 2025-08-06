@@ -9,8 +9,7 @@ type hashset[T any] struct {
 	m map[uint64]T
 }
 
-// reset initializes the internal map storage and creates a new hasher with the
-// package global seed value.
+// reset initializes the internal map storage.
 func (hs *hashset[T]) reset() {
 	hs.m = make(map[uint64]T)
 }

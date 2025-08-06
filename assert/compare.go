@@ -26,13 +26,15 @@ func compare(x, y any) int {
 		if isTime(rx) {
 			return time.Time.Compare(rx.Interface().(time.Time), ry.Interface().(time.Time))
 		}
-		return -2
+		return cmp.Compare(rx.String(), ry.String())
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return cmp.Compare(rx.Int(), ry.Int())
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		return cmp.Compare(rx.Uint(), ry.Uint())
 	case reflect.Float32, reflect.Float64:
 		return cmp.Compare(rx.Float(), ry.Float())
+	case reflect.String:
+		return cmp.Compare(rx.String(), ry.String())
 	default:
 		panic(fmt.Errorf("compare received unhandled type: %T", x))
 	}
