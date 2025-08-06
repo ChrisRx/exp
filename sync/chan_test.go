@@ -6,7 +6,6 @@ import (
 
 	"go.chrisrx.dev/x/assert"
 	"go.chrisrx.dev/x/chans"
-	"go.chrisrx.dev/x/slices"
 	"go.chrisrx.dev/x/sync"
 )
 
@@ -43,7 +42,7 @@ func TestChan(t *testing.T) {
 
 		assert.Equal(t,
 			messages,
-			slices.FromChan(ch.Load()),
+			chans.Collect(ch.Load()),
 		)
 	})
 

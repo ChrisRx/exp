@@ -62,6 +62,18 @@ func Insert[S ~[]E, E any](s S, i int, v ...E) S {
 	return slices.Insert(s, i, v...)
 }
 
+func Min[S ~[]E, E cmp.Ordered](x S) E {
+	return slices.Min(x)
+}
+
+func Max[S ~[]E, E cmp.Ordered](x S) E {
+	return slices.Max(x)
+}
+
+func BinarySearch[S ~[]E, E cmp.Ordered](x S, target E) (int, bool) {
+	return slices.BinarySearch(x, target)
+}
+
 func Replace[S ~[]E, E any](s S, i, j int, v ...E) S {
 	return slices.Replace(s, i, j, v...)
 }
