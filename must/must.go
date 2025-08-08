@@ -1,3 +1,4 @@
+// Package must provides functions for handling errors and panics.
 package must
 
 import "log/slog"

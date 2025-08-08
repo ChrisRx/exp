@@ -1,3 +1,5 @@
+// Package future provides types for representing values that are not
+// immediately ready.
 package future
 
 // Value is a value that may not yet be ready.

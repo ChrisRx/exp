@@ -1,3 +1,4 @@
+// Package chans defines various functions for working with Go channels.
 package chans
 
 import (

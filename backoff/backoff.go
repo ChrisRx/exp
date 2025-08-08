@@ -1,3 +1,4 @@
+// Package backoff provides a simple implementation of exponential backoff.
 package backoff
 
 import (

@@ -1,4 +1,4 @@
-// Package group provides [Group] for managing pools of goroutines.
+// Package group provides types for managing pools of goroutines.
 package group
 
 import (

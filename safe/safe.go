@@ -1,3 +1,5 @@
+// Package safe provides various functions and types for handling or
+// restricting unsafe behavior.
 package safe
 
 import (
