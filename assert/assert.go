@@ -24,11 +24,11 @@ func Equal[T any](tb testing.TB, expected, actual T, args ...any) {
 }
 
 func Panic(tb testing.TB, expected any, fn func(), args ...any) {
-	r := func(fn func()) (retr any) {
+	r := func() (retr any) {
 		defer func() { retr = recover() }()
 		fn()
 		return
-	}(fn)
+	}()
 
 	if !isZero(expected) && r == nil {
 		tb.Helper()

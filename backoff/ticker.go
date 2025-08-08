@@ -8,7 +8,6 @@ import (
 
 // A Ticker is like [time.Ticker] but accepts a [Backoff].
 type Ticker struct {
-	time.Ticker
 	c sync.Chan[time.Time]
 	b Backoff
 }
