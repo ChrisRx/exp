@@ -79,10 +79,8 @@ func makeClosedChannel[T any]() chan T {
 // LoadOrNew loads the stored channel, if present. If not present, a new
 // channel will be created and the newly stored channel is returned.
 func (ch *Chan[T]) LoadOrNew() (_ chan T, isNew bool) {
-	const maxAttempts = 100
+	const maxAttempts = 1000
 	for range maxAttempts {
-		// The stored value can be a nil pointer or a nil chan, so we need the
-		// actual value to work with CompareAndSwap.
 		old := ch.v.Load()
 		if v := ptr.From(old); v != nil {
 			return v, false
@@ -93,6 +91,8 @@ func (ch *Chan[T]) LoadOrNew() (_ chan T, isNew bool) {
 			return new, true
 		}
 	}
+	// This will only be reached if some kind of bug was introduced into the
+	// loop.
 	panic("Chan.LoadOrNew: infinite loop detected")
 }
 
