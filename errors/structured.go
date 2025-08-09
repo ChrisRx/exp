@@ -1,9 +1,7 @@
-package slogerr
+package errors
 
 import (
 	"log/slog"
-
-	"go.chrisrx.dev/x/errors"
 )
 
 // StructuredError is an interface representing an error that contains slog
@@ -24,10 +22,10 @@ type serror struct {
 	attrs []any
 }
 
-// New constructs a new serror implementing StructuredError.
-func New(msg string, args ...any) StructuredError {
+// NewStructuredError constructs a new serror implementing StructuredError.
+func NewStructuredError(msg string, args ...any) StructuredError {
 	return &serror{
-		err:   errors.New(msg),
+		err:   New(msg),
 		attrs: args,
 	}
 }
@@ -45,7 +43,7 @@ func (e *serror) LogValue() slog.Value {
 	return slog.Group("", e.attrs...).Value
 }
 
-// Wrap returns a new StructuredError wrapping the provided error with an
+// WithAttrs returns a new StructuredError wrapping the provided error with an
 // implementation of StructuredError containing any additional attributes.
 // Attributes can be key/value pairs or slog.Attr. If the provided error is
 // already a StructuredError, the attributes are appended to the existing
@@ -53,11 +51,11 @@ func (e *serror) LogValue() slog.Value {
 //
 // If the provided error is nil, then nil is returned. This enables using Wrap
 // with a return value without having to check error first.
-func Wrap(err error, args ...any) StructuredError {
+func WithAttrs(err error, args ...any) StructuredError {
 	if err == nil {
 		return nil
 	}
-	if serr, ok := errors.As[*serror](err); ok {
+	if serr, ok := As[*serror](err); ok {
 		serr.attrs = append(serr.attrs, args...)
 		return serr
 	}

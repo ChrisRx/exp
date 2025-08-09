@@ -1,6 +1,13 @@
 package slices
 
-import "go.chrisrx.dev/x/constraints"
+import (
+	"cmp"
+	"slices"
+
+	"go.chrisrx.dev/x/constraints"
+)
+
+//go:generate go tool pkgalias -ignore Sort,Reverse
 
 func Map[T any, R any](col []T, fn func(elem T) R) []R {
 	results := make([]R, len(col))
@@ -36,4 +43,25 @@ func N[T constraints.Integer](n T) []T {
 		result[i] = T(i)
 	}
 	return result
+}
+
+func FlatMap[T any, R any](col []T, fn func(elem T) []R) []R {
+	results := make([]R, 0)
+	for _, elem := range col {
+		results = append(results, fn(elem)...)
+	}
+	return results
+}
+
+// Sort sorts a slice of any ordered type in ascending order.
+// When sorting floating-point numbers, NaNs are ordered before other values.
+func Sort[S ~[]E, E cmp.Ordered](x S) S {
+	slices.Sort(x)
+	return x
+}
+
+// Reverse reverses the elements of the slice in place.
+func Reverse[S ~[]E, E any](s S) S {
+	slices.Reverse(s)
+	return s
 }

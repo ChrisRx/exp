@@ -9,6 +9,8 @@ import (
 	"fmt"
 )
 
+//go:generate go tool pkgalias -ignore As
+
 // As is a generic version of the stdlib errors.As. The purpose is to allow for
 // better ergonomics, changing this:
 //
@@ -19,7 +21,7 @@ import (
 //
 // into this:
 //
-//	if someErr, ok := xerrors.As[*SomeError](err); ok {
+//	if err, ok := xerrors.As[*SomeError](err); ok {
 //		...
 //	}
 func As[T error](err error) (_ T, ok bool) {
