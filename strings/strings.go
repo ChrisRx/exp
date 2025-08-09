@@ -8,6 +8,8 @@ import (
 	"unicode/utf8"
 )
 
+//go:generate go tool pkgalias
+
 // Dedent attempts to determine the indent-level from the first non-empty line,
 // and trims the indents from all lines.
 func Dedent(s string) string {

@@ -4,6 +4,8 @@ import (
 	"slices"
 )
 
+//go:generate go tool pkgalias
+
 func All[T comparable](S ...T) bool {
 	var zero T
 	return !slices.Contains(S, zero)
