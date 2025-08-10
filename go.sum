@@ -6,6 +6,8 @@ go.chrisrx.dev/tools v0.0.0-20250810151836-f20e5a8178ae h1:aYOrOz/PmzBgx4IgvaSQn
 go.chrisrx.dev/tools v0.0.0-20250810151836-f20e5a8178ae/go.mod h1:alCadETejPzrTQhYMW2cM8GwkBG/bVK0hbY0oVmbOxk=
 go.chrisrx.dev/tools v0.0.0-20250810160827-9bde82477a09 h1:2IxmXBzM//t8XQUYu9t7/dWVPRjJVjWjrzEy3cTCa8Q=
 go.chrisrx.dev/tools v0.0.0-20250810160827-9bde82477a09/go.mod h1:alCadETejPzrTQhYMW2cM8GwkBG/bVK0hbY0oVmbOxk=
+go.chrisrx.dev/tools v0.0.0-20250810192934-27dfaee09bf9 h1:LuozjGiHpMMRkcpQmhhNrEWkhRjBCv+eGR1fJGQr0xQ=
+go.chrisrx.dev/tools v0.0.0-20250810192934-27dfaee09bf9/go.mod h1:alCadETejPzrTQhYMW2cM8GwkBG/bVK0hbY0oVmbOxk=
 golang.org/x/mod v0.27.0 h1:kb+q2PyFnEADO2IEF935ehFUXlWiNjJWtRNgBLSfbxQ=
 golang.org/x/mod v0.27.0/go.mod h1:rWI627Fq0DEoudcK+MBkNkCe0EetEaDSwJJkCcjpazc=
 golang.org/x/sync v0.16.0 h1:ycBJEhp9p4vXvUZNszeOq0kGTPghopOL8q0fq3vstxw=
