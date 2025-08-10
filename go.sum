@@ -2,8 +2,8 @@ github.com/caarlos0/env/v11 v11.3.1 h1:cArPWC15hWmEt+gWk7YBi7lEXTXCvpaSdCiZE2X5m
 github.com/caarlos0/env/v11 v11.3.1/go.mod h1:qupehSf/Y0TUTsxKywqRt/vJjN5nz6vauiYEUUr8P4U=
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
-go.chrisrx.dev/tools v0.0.0-20250809192041-95b758f6d39e h1:gy+MLGl7e1rDQmfjGQVKeoFFDF/dqn+XPPq84J+NEdA=
-go.chrisrx.dev/tools v0.0.0-20250809192041-95b758f6d39e/go.mod h1:g49YRw5a4xaaollitUc8H0D7vPDTgkEQZxv7dTDENGs=
+go.chrisrx.dev/tools v0.0.0-20250810151836-f20e5a8178ae h1:aYOrOz/PmzBgx4IgvaSQn8iskEbw8x8sx+8I+zj+2NY=
+go.chrisrx.dev/tools v0.0.0-20250810151836-f20e5a8178ae/go.mod h1:alCadETejPzrTQhYMW2cM8GwkBG/bVK0hbY0oVmbOxk=
 golang.org/x/mod v0.27.0 h1:kb+q2PyFnEADO2IEF935ehFUXlWiNjJWtRNgBLSfbxQ=
 golang.org/x/mod v0.27.0/go.mod h1:rWI627Fq0DEoudcK+MBkNkCe0EetEaDSwJJkCcjpazc=
 golang.org/x/sync v0.16.0 h1:ycBJEhp9p4vXvUZNszeOq0kGTPghopOL8q0fq3vstxw=

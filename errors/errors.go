@@ -9,7 +9,7 @@ import (
 	"fmt"
 )
 
-//go:generate go tool pkgalias -ignore As
+//go:generate go tool aliaspkg -ignore As
 
 // As is a generic version of the stdlib errors.As. The purpose is to allow for
 // better ergonomics, changing this:

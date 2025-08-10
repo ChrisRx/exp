@@ -4,7 +4,7 @@ import (
 	"slices"
 )
 
-//go:generate go tool pkgalias
+//go:generate go tool aliaspkg
 
 func All[T comparable](S ...T) bool {
 	var zero T

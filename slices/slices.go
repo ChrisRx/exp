@@ -7,7 +7,7 @@ import (
 	"go.chrisrx.dev/x/constraints"
 )
 
-//go:generate go tool pkgalias -ignore Sort,Reverse
+//go:generate go tool aliaspkg -ignore Sort,Reverse
 
 func Map[T any, R any](col []T, fn func(elem T) R) []R {
 	results := make([]R, len(col))
