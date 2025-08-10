@@ -2,6 +2,9 @@ version: '3'
 
 tasks:
   generate:
-    silent: true
     cmds:
       - go generate ./...
+
+  test:
+    cmds:
+      - go test ./...
