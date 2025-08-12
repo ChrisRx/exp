@@ -7,7 +7,6 @@ import (
 	"iter"
 	"maps"
 
-	"go.chrisrx.dev/x/ptr"
 	"go.chrisrx.dev/x/slices"
 	"go.chrisrx.dev/x/sync"
 )
@@ -146,36 +145,36 @@ func (set *Set[T]) Pop() T {
 
 // Difference returns a new set containing all of the elements in this set that
 // are not present in the other set.
-func (set *Set[T]) Difference(other *Set[T]) Set[T] {
+func (set *Set[T]) Difference(other *Set[T]) *Set[T] {
 	set.init()
 	new := set.Copy()
 	other.Each(func(elem T) {
 		new.hs.remove(elem)
 	})
-	return ptr.From(new)
+	return new
 }
 
 // Intersection returns a new set made up of all of the elements that are
 // contained in both sets.
-func (set *Set[T]) Intersection(other *Set[T]) (new Set[T]) {
+func (set *Set[T]) Intersection(other *Set[T]) *Set[T] {
 	set.init()
-	new.init()
+	new := New[T]()
 	other.Each(func(elem T) {
 		if set.hs.any(elem) {
 			new.hs.add(elem)
 		}
 	})
-	return
+	return new
 }
 
 // Union returns a new set made up of all elements from each set.
-func (set *Set[T]) Union(other *Set[T]) Set[T] {
+func (set *Set[T]) Union(other *Set[T]) *Set[T] {
 	set.init()
 	new := set.Copy()
 	other.Each(func(elem T) {
 		new.hs.add(elem)
 	})
-	return ptr.From(new)
+	return new
 }
 
 func (set *Set[T]) MarshalJSON() ([]byte, error) {
