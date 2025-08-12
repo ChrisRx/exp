@@ -187,7 +187,7 @@ func OnceFunc(f func()) func() {
 //
 // This is an alias of https://pkg.go.dev/sync#OnceValue.
 func OnceValue[T any](f func() T) func() T {
-	return sync.OnceValue(f)
+	return sync.OnceValue[T](f)
 }
 
 // OnceValues returns a function that invokes f only once and returns the values
@@ -197,5 +197,5 @@ func OnceValue[T any](f func() T) func() T {
 //
 // This is an alias of https://pkg.go.dev/sync#OnceValues.
 func OnceValues[T1, T2 any](f func() (T1, T2)) func() (T1, T2) {
-	return sync.OnceValues(f)
+	return sync.OnceValues[T1, T2](f)
 }

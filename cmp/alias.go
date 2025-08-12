@@ -28,7 +28,7 @@ type Ordered = cmp.Ordered
 //
 // This is an alias of https://pkg.go.dev/cmp#Less.
 func Less[T Ordered](x, y T) bool {
-	return cmp.Less(x, y)
+	return cmp.Less[T](x, y)
 }
 
 // Compare returns
@@ -42,7 +42,7 @@ func Less[T Ordered](x, y T) bool {
 //
 // This is an alias of https://pkg.go.dev/cmp#Compare.
 func Compare[T Ordered](x, y T) int {
-	return cmp.Compare(x, y)
+	return cmp.Compare[T](x, y)
 }
 
 // Or returns the first of its arguments that is not equal to the zero value.
@@ -50,5 +50,5 @@ func Compare[T Ordered](x, y T) int {
 //
 // This is an alias of https://pkg.go.dev/cmp#Or.
 func Or[T comparable](vals ...T) T {
-	return cmp.Or(vals...)
+	return cmp.Or[T](vals...)
 }

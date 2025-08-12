@@ -1,3 +1,5 @@
+//go:generate go tool aliaspkg -docs=all
+
 package strings
 
 import (
@@ -7,8 +9,6 @@ import (
 	"strings"
 	"unicode/utf8"
 )
-
-//go:generate go tool aliaspkg
 
 // Dedent attempts to determine the indent-level from the first non-empty line,
 // and trims the indents from all lines.

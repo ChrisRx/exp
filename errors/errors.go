@@ -1,3 +1,5 @@
+//go:generate go tool aliaspkg -docs=all -ignore=As
+
 // Package errors is a mostly drop-in replacement for the standard library
 // errors package. It provides some extra functions for handling errors, and in
 // cases, like [errors.As], supplants the standard library version with a
@@ -8,8 +10,6 @@ import (
 	"errors"
 	"fmt"
 )
-
-//go:generate go tool aliaspkg -ignore As
 
 // As is a generic version of the stdlib errors.As. The purpose is to allow for
 // better ergonomics, changing this:
