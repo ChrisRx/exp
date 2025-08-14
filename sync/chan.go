@@ -17,7 +17,7 @@ import (
 // needed, [LazyChan] can be used.
 //
 // Since Chan uses [atomic.Pointer] to store the underlying channel, it
-// inherits the same limitations disallowing copying and spurious type
+// inherits the same restrictions disallowing copying and spurious type
 // conversion.
 type Chan[T any] struct {
 	v atomic.Pointer[chan T]

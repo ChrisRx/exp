@@ -23,9 +23,7 @@ func (s *Semaphore) Acquire(n int) {
 	if s.ch.Cap() == 0 {
 		return
 	}
-	for range n {
-		s.ch.Load() <- struct{}{}
-	}
+	s.ch.Send(make([]struct{}, n)...)
 }
 
 // Release releases a semaphore. If the size given was zero this operation is a
@@ -34,5 +32,5 @@ func (s *Semaphore) Release() {
 	if s.ch.Cap() == 0 {
 		return
 	}
-	<-s.ch.Load()
+	<-s.ch.Recv()
 }
