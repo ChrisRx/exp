@@ -20,8 +20,7 @@ import (
 // All methods lazily initialize the underlying storage, so the zero value of
 // Set can be used.
 type Set[T any] struct {
-	hs hashset[T]
-
+	m    map[uint64]T
 	once sync.Once
 }
 
@@ -31,14 +30,14 @@ func New[T any](elems ...T) *Set[T] {
 	s := new(Set[T])
 	s.init()
 	for _, elem := range elems {
-		s.hs.add(elem)
+		s.add(elem)
 	}
 	return s
 }
 
 func (set *Set[T]) init() {
 	set.once.Do(func() {
-		set.hs.reset()
+		set.m = make(map[uint64]T)
 	})
 }
 
@@ -46,7 +45,14 @@ func (set *Set[T]) init() {
 func (set *Set[T]) Add(elems ...T) {
 	set.init()
 	for _, elem := range elems {
-		set.hs.add(elem)
+		set.add(elem)
+	}
+}
+
+func (set *Set[T]) add(elem T) {
+	h := hasher.Hash(elem)
+	if _, ok := set.m[h]; !ok {
+		set.m[h] = elem
 	}
 }
 
@@ -54,27 +60,42 @@ func (set *Set[T]) Add(elems ...T) {
 func (set *Set[T]) Remove(elems ...T) {
 	set.init()
 	for _, e := range elems {
-		set.hs.remove(e)
+		set.remove(e)
 	}
+}
+
+func (set *Set[T]) remove(elem T) {
+	delete(set.m, hasher.Hash(elem))
 }
 
 // All checks that the set contains all of the elements provided. If any are
 // not part of the set, this returns false.
 func (set *Set[T]) All(elems ...T) bool {
 	set.init()
-	return set.hs.all(elems...)
+	for _, elem := range elems {
+		if !set.contains(elem) {
+			return false
+		}
+	}
+	return true
 }
 
 // Any checks if the set contains at least one of the provided elements.
 func (set *Set[T]) Any(elems ...T) bool {
-	set.init()
-	return set.hs.any(elems...)
+	return slices.ContainsFunc(elems, func(elem T) bool {
+		return set.contains(elem)
+	})
 }
 
-// Contains checks if the set contains at least one of the provided elements.
-// This is an alias to [Set.Any].
-func (set *Set[T]) Contains(elems ...T) bool {
-	return set.Any(elems...)
+// Contains checks if the set contains the provided elements.
+func (set *Set[T]) Contains(elem T) bool {
+	set.init()
+	return set.contains(elem)
+}
+
+func (set *Set[T]) contains(elem T) bool {
+	_, ok := set.m[hasher.Hash(elem)]
+	return ok
 }
 
 // Equals compares all the elements of two sets for equality.
@@ -84,7 +105,7 @@ func (set *Set[T]) Equals(other *Set[T]) bool {
 
 // Len returns how many elements are current in the set.
 func (set *Set[T]) Len() int {
-	return len(set.hs.m)
+	return len(set.m)
 }
 
 // Size returns how many elements are current in the set. This is an alias to
@@ -100,8 +121,8 @@ func (set *Set[T]) IsEmpty() bool {
 
 // Clear removes all values from the set.
 func (set *Set[T]) Clear() {
+	defer set.init()
 	set.once.Reset()
-	set.init()
 }
 
 // Copy constructs a new set, copying the internal state of this set into the
@@ -109,14 +130,16 @@ func (set *Set[T]) Clear() {
 func (set *Set[T]) Copy() *Set[T] {
 	var new Set[T]
 	new.init()
-	new.hs.m = maps.Clone(set.hs.m)
+	new.m = maps.Clone(set.m)
 	return &new
 }
 
 // Each applies the provided function to every element of the set.
 func (set *Set[T]) Each(fn func(T)) {
 	set.init()
-	set.hs.each(fn)
+	for _, elem := range set.m {
+		fn(elem)
+	}
 }
 
 // List returns all the values of the set as a slice.
@@ -128,7 +151,7 @@ func (set *Set[T]) List() []T {
 func (set *Set[T]) Values() iter.Seq[T] {
 	set.init()
 	return func(yield func(T) bool) {
-		for _, elem := range set.hs.m {
+		for _, elem := range set.m {
 			if !yield(elem) {
 				return
 			}
@@ -140,7 +163,12 @@ func (set *Set[T]) Values() iter.Seq[T] {
 // indeterministically selected.
 func (set *Set[T]) Pop() T {
 	set.init()
-	return set.hs.pop()
+	for _, elem := range set.m {
+		defer set.remove(elem)
+		return elem
+	}
+	var zero T
+	return zero
 }
 
 // Difference returns a new set containing all of the elements in this set that
@@ -149,7 +177,7 @@ func (set *Set[T]) Difference(other *Set[T]) *Set[T] {
 	set.init()
 	new := set.Copy()
 	other.Each(func(elem T) {
-		new.hs.remove(elem)
+		new.remove(elem)
 	})
 	return new
 }
@@ -160,8 +188,8 @@ func (set *Set[T]) Intersection(other *Set[T]) *Set[T] {
 	set.init()
 	new := New[T]()
 	other.Each(func(elem T) {
-		if set.hs.any(elem) {
-			new.hs.add(elem)
+		if set.contains(elem) {
+			new.add(elem)
 		}
 	})
 	return new
@@ -172,7 +200,7 @@ func (set *Set[T]) Union(other *Set[T]) *Set[T] {
 	set.init()
 	new := set.Copy()
 	other.Each(func(elem T) {
-		new.hs.add(elem)
+		new.add(elem)
 	})
 	return new
 }
@@ -194,11 +222,11 @@ func (set *Set[T]) UnmarshalJSON(data []byte) error {
 // Compare compares two sets for equality, returning true if they contain all
 // the same elements.
 func Compare[T any](s1, s2 *Set[T]) bool {
-	if len(s1.hs.m) != len(s2.hs.m) {
+	if len(s1.m) != len(s2.m) {
 		return false
 	}
-	for k := range s1.hs.m {
-		if _, ok := s2.hs.m[k]; !ok {
+	for k := range s1.m {
+		if _, ok := s2.m[k]; !ok {
 			return false
 		}
 	}

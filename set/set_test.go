@@ -26,6 +26,17 @@ func TestSet(t *testing.T) {
 		assert.Equal(t, false, s1.Equals(&s2))
 	})
 
+	t.Run("all", func(t *testing.T) {
+		var s Set[int]
+		s.Add(1)
+		s.Add(2)
+		s.Add(3)
+
+		assert.Equal(t, false, s.All(1, 2, 4))
+		s.Add(4)
+		assert.Equal(t, true, s.All(1, 2, 4))
+	})
+
 	t.Run("any", func(t *testing.T) {
 		var s Set[int]
 		s.Add(1)
@@ -172,17 +183,17 @@ func BenchmarkEquals(b *testing.B) {
 	s2 := New(1, 2, 3, 4, 5, 6, 8, 9, 10)
 	s3 := New(1, 2, 3, 4, 5, 6, 8, 9)
 	b.Run("hashset.all", func(b *testing.B) {
-		for range b.N {
-			s1.hs.all(s2.List()...)
+		for b.Loop() {
+			s1.All(s2.List()...)
 		}
 	})
 	b.Run("Compare", func(b *testing.B) {
-		for range b.N {
+		for b.Loop() {
 			Compare(s1, s2)
 		}
 	})
 	b.Run("Compare (length mismatch)", func(b *testing.B) {
-		for range b.N {
+		for b.Loop() {
 			Compare(s1, s3)
 		}
 	})
