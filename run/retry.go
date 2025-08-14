@@ -1,13 +1,13 @@
 package run
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"iter"
 	"time"
 
 	"go.chrisrx.dev/x/backoff"
-	"go.chrisrx.dev/x/cmp"
 )
 
 type RetryOptions struct {

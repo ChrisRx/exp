@@ -1,10 +1,9 @@
 package sort
 
 import (
+	"cmp"
 	"iter"
 	"sort"
-
-	"go.chrisrx.dev/x/cmp"
 )
 
 type Entry[K comparable, V cmp.Ordered] struct {

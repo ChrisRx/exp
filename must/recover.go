@@ -1,12 +1,12 @@
 package must
 
 import (
+	"cmp"
 	"fmt"
 	"log/slog"
 	"runtime"
 	"strings"
 
-	"go.chrisrx.dev/x/cmp"
 	"go.chrisrx.dev/x/errors"
 	"go.chrisrx.dev/x/stack"
 )
@@ -21,7 +21,7 @@ func Recover(errs ...error) {
 		if len(errs) == 0 {
 			slog.Error("panic",
 				slog.String("loc", stack.GetLocation(func(s stack.Source) bool {
-					return cmp.Any(
+					return cmp.Or(
 						strings.HasPrefix(s.FullName, "runtime"),
 						strings.HasPrefix(s.FullName, "go.chrisrx.dev/x/must"),
 						strings.HasPrefix(s.FullName, "go.chrisrx.dev/x/safe"),
