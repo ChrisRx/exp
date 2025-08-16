@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"cmp"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -68,4 +69,20 @@ func (i indent) Len() int {
 
 func (i indent) Bytes() []byte {
 	return bytes.Repeat(utf8.AppendRune(nil, i.c), i.n)
+}
+
+func ToSnakeCase(s string) string {
+	input := []rune(s)
+	var b strings.Builder
+	for i, v := range input {
+		if unicode.IsUpper(v) {
+			if i > 0 && (unicode.IsLower(rune(input[i-1])) || unicode.IsLower(input[i+1])) {
+				b.WriteByte('_')
+			}
+			b.WriteRune(unicode.ToLower(v))
+			continue
+		}
+		b.WriteRune(v)
+	}
+	return b.String()
 }
