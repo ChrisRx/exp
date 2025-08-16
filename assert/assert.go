@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -169,6 +170,22 @@ func WithinDuration(tb testing.TB, expected, actual time.Time, delta time.Durati
 		Expected: fmt.Sprintf("%v ±%v", format(expected), delta),
 		Actual:   fmt.Sprintf("%v %v", format(actual), format(actual.Sub(expected))),
 	})
+}
+
+func WithEnviron(tb testing.TB, environ map[string]string, fn func()) {
+	for k, v := range environ {
+		if err := os.Setenv(k, v); err != nil {
+			tb.Fatal(err)
+		}
+		defer func() {
+			if err := os.Unsetenv(k); err != nil {
+				tb.Fatal(err)
+			}
+		}()
+	}
+
+	tb.Helper()
+	fn()
 }
 
 func header(defaultMsg string, args []any) string {
