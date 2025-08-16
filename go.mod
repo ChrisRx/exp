@@ -4,8 +4,6 @@ go 1.24.5
 
 tool go.chrisrx.dev/tools/cmd/aliaspkg
 
-require github.com/caarlos0/env/v11 v11.3.1
-
 require (
 	go.chrisrx.dev/tools v0.0.0-20250812123438-2f6b4212be61 // indirect
 	golang.org/x/mod v0.27.0 // indirect

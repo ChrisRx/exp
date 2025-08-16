@@ -5,7 +5,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/caarlos0/env/v11"
+	"go.chrisrx.dev/x/env"
 )
 
 // Options specifies the configuration for a logger from environment variables.
@@ -92,8 +92,8 @@ func SetDefaultLevel(lvl slog.Level) {
 // package so that any packages can easily access a configured slog.Logger.
 func SetDefault() {
 	defaultOnce.Do(func() {
-		opts, err := env.ParseAs[Options]()
-		if err != nil {
+		var opts Options
+		if err := env.Parse(&opts); err != nil {
 			slog.Error("cannot parse log options from environment", slog.Any("error", err))
 			return
 		}
