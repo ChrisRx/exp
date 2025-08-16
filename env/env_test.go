@@ -1,0 +1,230 @@
+package env_test
+
+import (
+	"log/slog"
+	"testing"
+	"time"
+
+	"go.chrisrx.dev/x/assert"
+	"go.chrisrx.dev/x/env"
+	"go.chrisrx.dev/x/env/testdata/log"
+	"go.chrisrx.dev/x/env/testdata/pg"
+	"go.chrisrx.dev/x/env/testdata/pubsub"
+	"go.chrisrx.dev/x/env/testdata/spanner"
+	"go.chrisrx.dev/x/ptr"
+)
+
+func TestEnv(t *testing.T) {
+	assert.WithEnviron(t, map[string]string{
+		"USERS_SPANNER_PROJECT":     "test-project",
+		"USERS_SPANNER_INSTANCE":    "test-instance",
+		"USERS_SPANNER_DATABASE":    "test-database",
+		"TASKS_PUBSUB_TOPIC":        "test-pubsub-topic",
+		"TASKS_PUBSUB_SUBSCRIPTION": "test-pubsub-subscription",
+	}, func() {
+		expected := struct {
+			Tasks pubsub.Config
+			Users spanner.Config
+		}{
+			Tasks: pubsub.Config{
+				Topic:        "test-pubsub-topic",
+				Subscription: "test-pubsub-subscription",
+			},
+			Users: spanner.Config{
+				Project:  "test-project",
+				Instance: "test-instance",
+				Database: "test-database",
+			},
+		}
+
+		t.Run("anonymous struct", func(t *testing.T) {
+			var opts = env.MustParseAs[struct {
+				Tasks pubsub.Config
+				Users spanner.Config
+			}]()
+
+			assert.Equal(t, expected, opts)
+		})
+
+		t.Run("anonymous struct pointer", func(t *testing.T) {
+			var opts struct {
+				Tasks pubsub.Config
+				Users spanner.Config
+			}
+			env.MustParse(&opts)
+
+			assert.Equal(t, expected, opts)
+		})
+	})
+
+}
+
+func TestParse(t *testing.T) {
+	t.Run("nested structs", func(t *testing.T) {
+		assert.WithEnviron(t, map[string]string{
+			"LOG_LEVEL":      "DEBUG",
+			"LOG_FORMAT":     "json",
+			"LOG_ADD_SOURCE": "true",
+		}, func() {
+			assert.Equal(t, struct{ *log.Options }{
+				Options: &log.Options{
+					Level: func() *slog.LevelVar {
+						lvl := new(slog.LevelVar)
+						lvl.Set(slog.LevelDebug)
+						return lvl
+					}(),
+					Format:    log.JSONFormat,
+					AddSource: true,
+				},
+			}, env.MustParseAs[struct{ *log.Options }](),
+			)
+
+			assert.Equal(t, struct{ log.Options }{
+				Options: log.Options{
+					Level: func() *slog.LevelVar {
+						lvl := new(slog.LevelVar)
+						lvl.Set(slog.LevelDebug)
+						return lvl
+					}(),
+					Format:    log.JSONFormat,
+					AddSource: true,
+				},
+			}, env.MustParseAs[struct{ log.Options }](),
+			)
+		})
+	})
+
+	t.Run("embedded structs", func(t *testing.T) {
+		assert.WithEnviron(t, map[string]string{
+			"USERS_SPANNER_PROJECT":     "test-project",
+			"USERS_SPANNER_INSTANCE":    "test-instance",
+			"USERS_SPANNER_DATABASE":    "test-database",
+			"TASKS_PUBSUB_TOPIC":        "test-pubsub-topic",
+			"TASKS_PUBSUB_SUBSCRIPTION": "test-pubsub-subscription",
+		}, func() {
+			type s struct {
+				Tasks pubsub.Config
+				Users spanner.Config
+			}
+			assert.Equal(t, s{
+				Tasks: pubsub.Config{
+					Topic:        "test-pubsub-topic",
+					Subscription: "test-pubsub-subscription",
+				},
+				Users: spanner.Config{
+					Project:  "test-project",
+					Instance: "test-instance",
+					Database: "test-database",
+				},
+			}, env.MustParseAs[s]())
+
+			type s2 struct {
+				Tasks *pubsub.Config
+				Users spanner.Config
+			}
+			assert.Equal(t, &s2{
+				Tasks: &pubsub.Config{
+					Topic:        "test-pubsub-topic",
+					Subscription: "test-pubsub-subscription",
+				},
+				Users: spanner.Config{
+					Project:  "test-project",
+					Instance: "test-instance",
+					Database: "test-database",
+				},
+			}, env.MustParseAs[*s2]())
+		})
+	})
+
+	t.Run("default values", func(t *testing.T) {
+		type s struct {
+			String   string        `env:"DEFAULT_STRING" default:"default string"`
+			Duration time.Duration `env:"DEFAULT_DURATION" default:"10m"`
+			Time     time.Time     `env:"DEFAULT_TIME" default:"2020-12-30" layout:"2006-01-02"`
+		}
+		assert.Equal(t, s{
+			String:   "default string",
+			Duration: 10 * time.Minute,
+			Time:     time.Date(2020, 12, 30, 0, 0, 0, 0, time.UTC),
+		}, env.MustParseAs[s]())
+
+		var opts = env.MustParseAs[struct {
+			Time time.Time `env:"DEFAULT_TIME" default:"time.Now()"`
+		}]()
+		assert.WithinDuration(t, time.Now(), opts.Time, 10*time.Millisecond)
+	})
+
+	t.Run("slices", func(t *testing.T) {
+		assert.WithEnviron(t, map[string]string{
+			"STRING_SLICE":         "a,b,c",
+			"INT_SLICE":            "-1,0,1",
+			"INT32_SLICE":          "1,2,3",
+			"UINT_SLICE":           "1,2,3",
+			"STRING_POINTER_SLICE": "a,b,c",
+		}, func() {
+			type s struct {
+				StringSlice        []string  `env:"STRING_SLICE"`
+				IntSlice           []int     `env:"INT_SLICE"`
+				Int32Slice         []int32   `env:"INT32_SLICE"`
+				UintSlice          []uint    `env:"UINT_SLICE"`
+				StringPointerSlice []*string `env:"STRING_POINTER_SLICE"`
+			}
+			assert.Equal(t, s{
+				StringSlice:        []string{"a", "b", "c"},
+				IntSlice:           []int{-1, 0, 1},
+				Int32Slice:         []int32{1, 2, 3},
+				UintSlice:          []uint{1, 2, 3},
+				StringPointerSlice: []*string{ptr.To("a"), ptr.To("b"), ptr.To("c")},
+			}, env.MustParseAs[s](),
+			)
+		})
+	})
+
+	t.Run("complex", func(t *testing.T) {
+		assert.WithEnviron(t, map[string]string{
+			"DATABASE_HOST": "127.0.0.1",
+			"DATABASE_PORT": "5432",
+			"DATABASE_NAME": "postgres",
+		}, func() {
+			opts := env.MustParseAs[struct {
+				Database pg.Config
+			}]()
+
+			assert.Equal(t, pg.Config{
+				Host:           "127.0.0.1",
+				Port:           5432,
+				DatabaseName:   "postgres",
+				ConnectTimeout: 30 * time.Second,
+				SSLMode:        pg.Prefer,
+			}, opts.Database)
+			assert.Equal(t,
+				"postgresql://127.0.0.1:5432/postgres?connect_timeout=30&sslmode=prefer",
+				opts.Database.String(),
+			)
+		})
+
+		assert.WithEnviron(t, map[string]string{
+			"USERS_DB_NAME":            "users",
+			"USERS_DB_SSL_MODE":        "verify-ca",
+			"USERS_DB_CONNECT_TIMEOUT": "1m",
+			"USERS_DB_MAX_POOL_CONNS":  "100",
+		}, func() {
+			opts := env.MustParseAs[struct {
+				Database pg.Config `namespace:"USERS_DB"`
+			}]()
+
+			assert.Equal(t, pg.Config{
+				Host:           "localhost",
+				Port:           5432,
+				DatabaseName:   "users",
+				ConnectTimeout: 1 * time.Minute,
+				SSLMode:        pg.VerifyCA,
+				MaxPoolConns:   100,
+			}, opts.Database)
+			assert.Equal(t,
+				"postgresql://localhost:5432/users?connect_timeout=60&max_pool_conns=100&sslmode=verify-ca",
+				opts.Database.String(),
+			)
+		})
+	})
+}

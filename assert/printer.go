@@ -140,8 +140,9 @@ func (p *printer) sprint(rv reflect.Value, depth int) string {
 	case reflect.Array, reflect.Slice:
 		var sb strings.Builder
 		sb.WriteString(p.getIndent(depth))
-		sb.WriteString(fmt.Sprintf("[]%s{", rv.Type().String()))
+		sb.WriteString(fmt.Sprintf("[]%s{\n", rv.Type().String()))
 		for i := range rv.Len() {
+			sb.WriteString(p.getIndent(depth + 1))
 			sb.WriteString(p.sprint(rv.Index(i), depth+1))
 			sb.WriteString("\n")
 		}

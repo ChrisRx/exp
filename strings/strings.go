@@ -73,10 +73,13 @@ func (i indent) Bytes() []byte {
 
 func ToSnakeCase(s string) string {
 	input := []rune(s)
+	isLower := func(idx int) bool {
+		return idx < len(input)-1 && unicode.IsLower(input[idx])
+	}
 	var b strings.Builder
 	for i, v := range input {
 		if unicode.IsUpper(v) {
-			if i > 0 && (unicode.IsLower(rune(input[i-1])) || unicode.IsLower(input[i+1])) {
+			if i > 0 && (isLower(i-1) || isLower(i+1)) {
 				b.WriteByte('_')
 			}
 			b.WriteRune(unicode.ToLower(v))
