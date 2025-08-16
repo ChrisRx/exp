@@ -3,7 +3,6 @@ package assert
 import (
 	"cmp"
 	"fmt"
-	"hash/maphash"
 	"reflect"
 	"regexp"
 	"strings"
@@ -40,27 +39,10 @@ func compare(x, y any) int {
 	}
 }
 
-func equal(a, b any, opts ...Option) bool {
-	o := &options{}
-	for _, opt := range opts {
-		opt(o)
-	}
-	return hash(a) == hash(b)
-}
-
-var seed = maphash.MakeSeed()
-
-func hash(v any) uint64 {
-	h := new(maphash.Hash)
-	h.SetSeed(seed)
-	_, _ = fmt.Fprint(h, v)
-	return h.Sum64()
-}
-
 func contains[S ~[]E, E any](s S, v E) bool {
-	return slices.Contains(slices.Map(s, func(elem E) uint64 {
-		return hash(elem)
-	}), hash(v))
+	return slices.Contains(slices.Map(s, func(elem E) bool {
+		return len(Diff(elem, v)) > 0
+	}), true)
 }
 
 func isTime(v reflect.Value) bool {

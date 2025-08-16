@@ -27,12 +27,12 @@ func TestAssert(t *testing.T) {
 			MaxInterval time.Duration
 			Multiplier  float64
 			Jitter      time.Duration
-			cur         time.Duration
+			cur         time.Time
 		}
-		b1 := &Backoff{}
-		b2 := &Backoff{}
-		assert.Equal(NoFatal(t), b1, b2)
-		b2.MinInterval = 100 * time.Millisecond
+		b1 := Backoff{}
+		b2 := Backoff{}
+		assert.Equal(t, b1, b2)
+		b2.cur = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 		assert.Equal(NoFatal(t), b1, b2)
 	})
 

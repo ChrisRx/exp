@@ -53,9 +53,6 @@ func (p *printer) sprint(rv reflect.Value, depth int) string {
 		}
 	case reflect.Struct:
 		if isTime(rv) {
-			if !rv.CanInterface() {
-				rv = reflect.NewAt(rv.Type(), unsafe.Pointer(rv.UnsafeAddr())).Elem()
-			}
 			return rv.Interface().(time.Time).Format(time.RFC3339Nano)
 		}
 	}
@@ -101,7 +98,7 @@ func (p *printer) sprint(rv reflect.Value, depth int) string {
 		return sb.String()
 	case reflect.Chan:
 		return rv.Type().String()
-	case reflect.Ptr:
+	case reflect.Pointer:
 		if v, ok := p.ptrs.get(rv); ok {
 			return fmt.Sprintf("(*%v)(%v)", replaceAnyType(v.Type().String()), rv.Addr())
 		}
@@ -114,20 +111,28 @@ func (p *printer) sprint(rv reflect.Value, depth int) string {
 		var sb strings.Builder
 		sb.WriteString(rv.Type().String())
 		sb.WriteString("{\n")
-		maxFieldNameLen := slices.Max(slices.Map(slices.N(rv.NumField()), func(i int) int {
-			return len(rv.Type().Field(i).Name)
-		}))
+		var maxFieldNameLen int
+		if rv.NumField() > 0 {
+			maxFieldNameLen = slices.Max(slices.Map(slices.N(rv.NumField()), func(i int) int {
+				name := rv.Type().Field(i).Name
+				return len(name)
+			}))
+		}
 		for i := range rv.NumField() {
 			ft := rv.Type().Field(i)
 			fv := rv.Field(i)
-			if fv.CanInterface() {
-				sb.WriteString(p.getIndent(depth + 1))
-				sb.WriteString(ft.Name)
-				sb.WriteString(": ")
-				sb.WriteString(strings.Repeat(" ", max(maxFieldNameLen-len(ft.Name), 0)))
-				sb.WriteString(p.sprint(fv, depth+1))
-				sb.WriteString("\n")
+			if !fv.CanInterface() && fv.CanAddr() {
+				fv = reflect.NewAt(fv.Type(), unsafe.Pointer(fv.UnsafeAddr())).Elem()
 			}
+			if !fv.CanAddr() {
+				fv = makeAddressableField(rv, i)
+			}
+			sb.WriteString(p.getIndent(depth + 1))
+			sb.WriteString(ft.Name)
+			sb.WriteString(": ")
+			sb.WriteString(strings.Repeat(" ", max(maxFieldNameLen-len(ft.Name), 0)))
+			sb.WriteString(p.sprint(fv, depth+1))
+			sb.WriteString("\n")
 		}
 		sb.WriteString(p.getIndent(depth))
 		sb.WriteString("}")
@@ -172,4 +177,11 @@ func (p *ptrset) remove(v reflect.Value) {
 
 func replaceAnyType(s string) string {
 	return strings.ReplaceAll(s, "interface {}", "any")
+}
+
+func makeAddressableField(rv reflect.Value, fieldNum int) reflect.Value {
+	rv2 := reflect.New(rv.Type()).Elem()
+	rv2.Set(rv)
+	fv := rv2.Field(fieldNum)
+	return reflect.NewAt(fv.Type(), unsafe.Pointer(fv.UnsafeAddr())).Elem()
 }

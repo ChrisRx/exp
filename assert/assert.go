@@ -13,15 +13,13 @@ import (
 )
 
 func Equal[T any](tb testing.TB, expected, actual T, args ...any) {
-	if equal(expected, actual) {
-		return
+	if diff := Diff(expected, actual); len(diff) > 0 {
+		tb.Helper()
+		Fatal(tb, Message{
+			Header: header("not equal", args),
+			Diff:   Diff(expected, actual),
+		})
 	}
-
-	tb.Helper()
-	Fatal(tb, Message{
-		Header: header("not equal", args),
-		Diff:   Diff(expected, actual),
-	})
 }
 
 func Panic(tb testing.TB, expected any, fn func(), args ...any) {
@@ -39,16 +37,14 @@ func Panic(tb testing.TB, expected any, fn func(), args ...any) {
 		})
 	}
 
-	if equal(expected, r) {
-		return
+	if diff := Diff(expected, r); len(diff) > 0 {
+		tb.Helper()
+		Fatal(tb, Message{
+			Header:   header("unexpected panic", args),
+			Expected: cmp.Or(expected, "<nil>"),
+			Actual:   r,
+		})
 	}
-
-	tb.Helper()
-	Fatal(tb, Message{
-		Header:   header("unexpected panic", args),
-		Expected: cmp.Or(expected, "<nil>"),
-		Actual:   r,
-	})
 }
 
 func NoPanic(tb testing.TB, fn func(), args ...any) {
