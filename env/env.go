@@ -115,6 +115,13 @@ func (p *Parser) Parse(v any) error {
 }
 
 func (p *Parser) parse(rv reflect.Value, ns Namespace, field Field) error {
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			rv.Set(reflect.New(rv.Type().Elem()))
+		}
+		return p.parse(reflect.Indirect(rv), ns, field)
+	}
+
 	// First, check for customer parsers. This allows us to short circuit if we
 	// have a specific parser function. It is important that this checks first to
 	// enable overriding any default parsing for a value.
@@ -127,30 +134,24 @@ func (p *Parser) parse(rv reflect.Value, ns Namespace, field Field) error {
 		if err != nil {
 			return err
 		}
-		value := reflect.ValueOf(v)
-		if rv.Type().Kind() == reflect.Pointer {
-			value = makeAddressable(v)
-		}
-		rv.Set(value)
+		rv.Set(reflect.ValueOf(v))
 		return nil
 	}
 	// Check for common interfaces that would allow us to avoid additional
 	// parsing. Anything that implements [encoding.TextUnmarshaler] can be used
 	// to set the value.
-	if iface := as[encoding.TextUnmarshaler](rv); iface != nil {
+	if v, ok := TypeAssert[encoding.TextUnmarshaler](rv); ok {
 		s, err := p.get(ns, field)
 		if err != nil {
 			return err
 		}
-		if err := iface.UnmarshalText([]byte(s)); err != nil {
+		if err := v.UnmarshalText([]byte(s)); err != nil {
 			return err
 		}
 		return nil
 	}
 
 	switch rv.Kind() {
-	case reflect.Pointer:
-		return p.parse(reflect.Indirect(rv), ns, field)
 	case reflect.Struct:
 		if !p.DisableAutoTag {
 			ns = ns.Append(field)
@@ -350,29 +351,19 @@ func (n *Namespace) Pop() {
 	*n = (*n)[:len(*n)-1]
 }
 
-func as[T any](rv reflect.Value) T {
-	if rv.Kind() == reflect.Ptr {
-		if rv.IsNil() {
-			rv.Set(reflect.New(rv.Type().Elem()))
-		}
-	} else if rv.CanAddr() {
+func TypeAssert[T any](rv reflect.Value) (T, bool) {
+	if rv.CanAddr() {
 		rv = rv.Addr()
 	}
-
 	if !rv.CanInterface() {
 		var zero T
-		return zero
+		return zero, false
 	}
-
 	v, ok := rv.Interface().(T)
-	if !ok {
-		var zero T
-		return zero
-	}
-	return v
+	return v, ok
 }
 
-func makeAddressable(v any) reflect.Value {
+func MakeAddressable(v any) reflect.Value {
 	rv := reflect.New(reflect.TypeOf(v))
 	rv.Elem().Set(reflect.ValueOf(v))
 	return rv

@@ -1,7 +1,9 @@
 package env_test
 
 import (
+	"fmt"
 	"log/slog"
+	"net/url"
 	"testing"
 	"time"
 
@@ -225,6 +227,44 @@ func TestParse(t *testing.T) {
 				"postgresql://localhost:5432/users?connect_timeout=60&max_pool_conns=100&sslmode=verify-ca",
 				opts.Database.String(),
 			)
+		})
+	})
+
+	t.Run("custom parser funcs", func(t *testing.T) {
+		type CustomType struct {
+			S string
+		}
+		assert.Panic(t, fmt.Errorf("cannot register type %T: must not be pointer", &CustomType{}), func() {
+			env.Register[*CustomType](func(s string, field env.Field) (any, error) {
+				return CustomType{S: s}, nil
+			})
+		})
+		env.Register[CustomType](func(s string, field env.Field) (any, error) {
+			return CustomType{S: s}, nil
+		})
+		assert.WithEnviron(t, map[string]string{
+			"DURATION":     "10s",
+			"DURATION_PTR": "90s",
+			"URL":          "https://www.google.com",
+			"CUSTOM_TYPE":  "hi",
+		}, func() {
+			opts := env.MustParseAs[struct {
+				Duration      time.Duration  `env:"DURATION"`
+				DurationPtr   *time.Duration `env:"DURATION_PTR"`
+				URL           url.URL        `env:"URL"`
+				URLPtr        *url.URL       `env:"URL"`
+				CustomType    CustomType     `env:"CUSTOM_TYPE"`
+				CustomTypePtr *CustomType    `env:"CUSTOM_TYPE"`
+			}]()
+
+			assert.Equal(t, 10*time.Second, opts.Duration)
+			assert.Equal(t, ptr.To(90*time.Second), opts.DurationPtr)
+			assert.Equal(t, url.URL{Scheme: "https", Host: "www.google.com"}, opts.URL)
+			assert.Equal(t, &url.URL{Scheme: "https", Host: "www.google.com"}, opts.URLPtr)
+			assert.Equal(t, 10*time.Second, opts.Duration)
+			assert.Equal(t, CustomType{S: "hi"}, opts.CustomType)
+			assert.Equal(t, &CustomType{S: "hi"}, opts.CustomTypePtr)
+
 		})
 	})
 }

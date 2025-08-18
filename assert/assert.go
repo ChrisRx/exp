@@ -42,6 +42,7 @@ func Panic(tb testing.TB, expected any, fn func(), args ...any) {
 		tb.Helper()
 		Fatal(tb, Message{
 			Header:   header("unexpected panic", args),
+			Diff:     diff,
 			Expected: cmp.Or(expected, "<nil>"),
 			Actual:   r,
 		})
