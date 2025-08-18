@@ -24,7 +24,7 @@ func Parse(v any, opts ...ParserOption) error {
 
 // Parse is a convenience function for calling [Parse] that panics if an error
 // is encountered.
-func MustParse[T any](v T, opts ...ParserOption) {
+func MustParse(v any, opts ...ParserOption) {
 	if err := Parse(v, opts...); err != nil {
 		panic(err)
 	}
@@ -42,8 +42,7 @@ func ParseAs[T any](opts ...ParserOption) (T, error) {
 		}
 		return v, nil
 	}
-	rv = reflect.New(reflect.TypeFor[T]().Elem())
-	v, ok := rv.Interface().(T)
+	v, ok := TypeAssert[T](rv)
 	if !ok {
 		var zero T
 		return zero, fmt.Errorf("invalid type: %v", v)
@@ -78,14 +77,23 @@ func DisableAutoTag() ParserOption {
 	}
 }
 
+func Separator(sep string) ParserOption {
+	return func(p *Parser) {
+		p.Separator = sep
+	}
+}
+
 type Parser struct {
 	Namespace      string
 	RequireTagged  bool
 	DisableAutoTag bool
+	Separator      string
 }
 
 func NewParser(opts ...ParserOption) *Parser {
-	p := &Parser{}
+	p := &Parser{
+		Separator: ",",
+	}
 	for _, opt := range opts {
 		opt(p)
 	}
@@ -98,38 +106,120 @@ func (p *Parser) Parse(v any) error {
 		return fmt.Errorf("must be a pointer to a struct, received %T", v)
 	}
 	rv = reflect.Indirect(rv)
-
-	var ns Namespace
-	if p.Namespace != "" {
-		ns = append(ns, p.Namespace)
-	}
-
 	for i := range rv.NumField() {
 		fv := rv.Field(i)
 		field := GetField(rv.Type().Field(i))
-		if err := p.parse(fv, ns, field); err != nil {
+		if !p.RequireTagged && field.ShouldSkip() {
+			return nil
+		}
+		if p.Namespace != "" {
+			field.prefixes = append(field.prefixes, p.Namespace)
+		}
+		if err := p.parse(fv, field); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (p *Parser) parse(rv reflect.Value, ns Namespace, field Field) error {
+func (p *Parser) parse(rv reflect.Value, field Field) error {
 	if rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
 			rv.Set(reflect.New(rv.Type().Elem()))
 		}
-		return p.parse(reflect.Indirect(rv), ns, field)
+		return p.parse(reflect.Indirect(rv), field)
+	}
+
+	if isStruct(rv) {
+		// Add to the prefix when a field is not embedded. If auto tagging is
+		// disabled then no prefixes are added. If the env or namespace tag is set,
+		// those are preferred, otherwise it uses the parent field name.
+		prefixes := field.prefixes
+		if !p.DisableAutoTag && !field.Anonymous {
+			ns := cmp.Or(field.Env, field.Namespace, strings.ToSnakeCase(field.Name))
+			if ns != "" {
+				prefixes = append(prefixes, strings.ToUpper(ns))
+			}
+		}
+		for i := range reflect.Indirect(rv).NumField() {
+			fv := rv.Field(i)
+			field := GetField(rv.Type().Field(i))
+			if !p.RequireTagged && field.ShouldSkip() {
+				return nil
+			}
+			field.prefixes = append(field.prefixes, prefixes...)
+			if err := p.parse(fv, field); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	s, ok := field.Get()
+	if !ok || s == "" {
+		if p.RequireTagged || field.Required {
+			return fmt.Errorf("required field not set: %v", field.Key())
+		}
+		return nil
+	}
+
+	switch rv.Kind() {
+	case reflect.Array, reflect.Slice:
+		et := rv.Type().Elem()
+		if !isSlice(et) {
+			return fmt.Errorf("received invalid slice element type: %v", et)
+		}
+		elems := slices.DeleteFunc(strings.Split(s, p.Separator), func(s string) bool {
+			return s == ""
+		})
+		if len(elems) == 0 {
+			return nil
+		}
+		sv := reflect.MakeSlice(reflect.SliceOf(et), len(elems), len(elems))
+		for i := range sv.Len() {
+			if err := p.set(sv.Index(i), elems[i], field); err != nil {
+				return err
+			}
+		}
+		rv.Set(sv)
+		return nil
+	default:
+		return p.set(rv, s, field)
+	}
+}
+
+func isStruct(rv reflect.Value) bool {
+	if rv.Type().Kind() != reflect.Struct {
+		return false
+	}
+	if _, ok := Lookup(rv.Type()); ok {
+		return false
+	}
+	if _, ok := TypeAssert[encoding.TextUnmarshaler](rv); ok {
+		return false
+	}
+	return true
+}
+
+func isSlice(rt reflect.Type) bool {
+	if rt.Kind() == reflect.Pointer {
+		rt = rt.Elem()
+	}
+	if rt.Kind() == reflect.Array || rt.Kind() == reflect.Slice {
+		return false
+	}
+	return true
+}
+
+func (p *Parser) set(rv reflect.Value, s string, field Field) error {
+	if !rv.CanSet() {
+		panic(fmt.Errorf("cannot set value: %v", rv.Type()))
 	}
 
 	// First, check for customer parsers. This allows us to short circuit if we
 	// have a specific parser function. It is important that this checks first to
 	// enable overriding any default parsing for a value.
 	if fn, ok := Lookup(rv.Type()); ok {
-		s, err := p.get(ns, field)
-		if err != nil {
-			return err
-		}
 		v, err := fn(s, field)
 		if err != nil {
 			return err
@@ -140,155 +230,60 @@ func (p *Parser) parse(rv reflect.Value, ns Namespace, field Field) error {
 	// Check for common interfaces that would allow us to avoid additional
 	// parsing. Anything that implements [encoding.TextUnmarshaler] can be used
 	// to set the value.
-	if v, ok := TypeAssert[encoding.TextUnmarshaler](rv); ok {
-		s, err := p.get(ns, field)
-		if err != nil {
-			return err
-		}
-		if err := v.UnmarshalText([]byte(s)); err != nil {
+	if iface, ok := TypeAssert[encoding.TextUnmarshaler](rv); ok {
+		if err := iface.UnmarshalText([]byte(s)); err != nil {
 			return err
 		}
 		return nil
-	}
-
-	switch rv.Kind() {
-	case reflect.Struct:
-		if !p.DisableAutoTag {
-			ns = ns.Append(field)
-		}
-		rv = reflect.Indirect(rv)
-		for i := range rv.NumField() {
-			fv := rv.Field(i)
-			field := GetField(rv.Type().Field(i))
-			if err := p.parse(fv, ns, field); err != nil {
-				return err
-			}
-		}
-		return nil
-	default:
-		if !p.DisableAutoTag {
-			ns = ns.Append(field)
-		}
-		v, err := p.get(ns, field)
-		if err != nil {
-			return err
-		}
-		if v == "" {
-			return nil
-		}
-		return p.set(rv, v)
-	}
-}
-
-func (p *Parser) get(ns Namespace, field Field) (string, error) {
-	if field.Ignored || field.Env == "" {
-		return "", nil
-	}
-	slog.Debug("get env value", slog.String("key", ns.Join(field.Env)))
-	if v, ok := os.LookupEnv(ns.Join(field.Env)); ok {
-		return v, nil
-	}
-	if field.Default != "" {
-		return field.Default, nil
-	}
-	if p.RequireTagged || field.Required {
-		return "", fmt.Errorf("required field not set: %v", ns.Join(field.Env))
-	}
-	return "", nil
-}
-
-func (p *Parser) set(rv reflect.Value, v string) error {
-	if !rv.CanSet() {
-		panic(fmt.Errorf("cannot set value: %v", rv.Type()))
 	}
 
 	switch rv.Kind() {
 	case reflect.String:
-		rv.SetString(v)
+		rv.SetString(s)
 		return nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		i, err := strconv.ParseInt(v, 10, 64)
+		i, err := strconv.ParseInt(s, 10, 64)
 		if err != nil {
 			return err
 		}
 		rv.SetInt(i)
 		return nil
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		i, err := strconv.ParseUint(v, 10, 64)
+		i, err := strconv.ParseUint(s, 10, 64)
 		if err != nil {
 			return err
 		}
 		rv.SetUint(i)
 		return nil
 	case reflect.Bool:
-		b, err := strconv.ParseBool(v)
+		b, err := strconv.ParseBool(s)
 		if err != nil {
 			return err
 		}
 		rv.SetBool(b)
 		return nil
 	case reflect.Float32:
-		f, err := strconv.ParseFloat(v, 32)
+		f, err := strconv.ParseFloat(s, 32)
 		if err != nil {
 			return err
 		}
 		rv.SetFloat(f)
 		return nil
 	case reflect.Float64:
-		f, err := strconv.ParseFloat(v, 64)
+		f, err := strconv.ParseFloat(s, 64)
 		if err != nil {
 			return err
 		}
 		rv.SetFloat(f)
 		return nil
-	case reflect.Array, reflect.Slice:
-		return p.setSlice(rv, v)
 	case reflect.Pointer:
 		if rv.IsNil() {
 			rv.Set(reflect.New(rv.Type().Elem()))
 		}
-		return p.set(reflect.Indirect(rv), v)
+		return p.set(reflect.Indirect(rv), s, field)
 	default:
-		return fmt.Errorf("setValue: received %T", rv.Interface())
+		return fmt.Errorf("received unhandled value: %T", rv.Interface())
 	}
-}
-
-var allowedSliceElementKinds = []reflect.Kind{
-	reflect.String,
-	reflect.Int,
-	reflect.Int8,
-	reflect.Int16,
-	reflect.Int32,
-	reflect.Int64,
-	reflect.Uint,
-	reflect.Uint8,
-	reflect.Uint16,
-	reflect.Uint32,
-	reflect.Uint64,
-	reflect.Float32,
-	reflect.Float64,
-	reflect.Pointer,
-}
-
-func (p *Parser) setSlice(rv reflect.Value, v string) error {
-	et := rv.Type().Elem()
-	if !slices.Contains(allowedSliceElementKinds, et.Kind()) {
-		return fmt.Errorf("received invalid slice element type: %v", et)
-	}
-	elems := slices.DeleteFunc(strings.Split(v, ","), func(s string) bool {
-		return s == ""
-	})
-	if len(elems) == 0 {
-		return nil
-	}
-	sv := reflect.MakeSlice(reflect.SliceOf(et), len(elems), len(elems))
-	for i := range sv.Len() {
-		if err := p.set(sv.Index(i), elems[i]); err != nil {
-			return err
-		}
-	}
-	rv.Set(sv)
-	return nil
 }
 
 type Field struct {
@@ -302,17 +297,14 @@ type Field struct {
 	Required  bool
 	Ignored   bool
 	Layout    string
+
+	prefixes []string
 }
 
 func GetField(ft reflect.StructField) Field {
-	name := ft.Name
-	rt := ft.Type
-	if ft.Type.Kind() == reflect.Pointer {
-		rt = ft.Type.Elem()
-	}
 	return Field{
-		Name:      name,
-		Type:      rt,
+		Name:      ft.Name,
+		Type:      IndirectType(ft.Type),
 		Anonymous: ft.Anonymous,
 		Env:       ft.Tag.Get("env"),
 		Namespace: ft.Tag.Get("namespace"),
@@ -323,35 +315,29 @@ func GetField(ft reflect.StructField) Field {
 	}
 }
 
-type Namespace []string
-
-func (n Namespace) Append(field Field) Namespace {
-	if field.Type.Kind() == reflect.Struct && !field.Anonymous {
-		ns := cmp.Or(field.Env, field.Namespace)
-		if ns == "" {
-			ns = strings.ToSnakeCase(field.Name)
-		}
-		n = append(n, strings.ToUpper(ns))
+func (f Field) Get() (s string, ok bool) {
+	slog.Debug("get env value", slog.String("key", f.Key()))
+	if s, ok := os.LookupEnv(f.Key()); ok {
+		return s, true
 	}
-	return n
+	return f.Default, f.Default != ""
 }
 
-func (n Namespace) Join(elems ...string) string {
-	return strings.Join(append(n, elems...), "_")
+func (f Field) Key() string {
+	return strings.Join(append(f.prefixes, f.Env), "_")
 }
 
-func (n Namespace) String() string {
-	return strings.Join(n, "_")
-}
-
-func (n *Namespace) Pop() {
-	if len(*n) == 0 {
-		return
-	}
-	*n = (*n)[:len(*n)-1]
+func (f Field) ShouldSkip() bool {
+	return f.Type.Kind() != reflect.Struct && (f.Ignored || f.Env == "")
 }
 
 func TypeAssert[T any](rv reflect.Value) (T, bool) {
+	rt := reflect.TypeFor[T]()
+	if rt.Kind() != reflect.Interface {
+		if rv.Type().Kind() == reflect.Pointer && rv.IsNil() {
+			rv = reflect.New(rt.Elem())
+		}
+	}
 	if rv.CanAddr() {
 		rv = rv.Addr()
 	}
@@ -363,8 +349,9 @@ func TypeAssert[T any](rv reflect.Value) (T, bool) {
 	return v, ok
 }
 
-func MakeAddressable(v any) reflect.Value {
-	rv := reflect.New(reflect.TypeOf(v))
-	rv.Elem().Set(reflect.ValueOf(v))
-	return rv
+func IndirectType(rt reflect.Type) reflect.Type {
+	if rt.Kind() == reflect.Pointer {
+		rt = rt.Elem()
+	}
+	return rt
 }

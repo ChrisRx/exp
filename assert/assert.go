@@ -68,6 +68,15 @@ func Error(tb testing.TB, expected any, actual error, args ...any) bool {
 		})
 		return false
 	}
+	if actual == nil {
+		tb.Helper()
+		Fatal(tb, Message{
+			Header:   header("expected error", args),
+			Expected: expected,
+			Actual:   "(nil)",
+		})
+		return false
+	}
 
 	switch expected := expected.(type) {
 	case error:

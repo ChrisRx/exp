@@ -13,6 +13,7 @@ import (
 	"go.chrisrx.dev/x/env/testdata/pg"
 	"go.chrisrx.dev/x/env/testdata/pubsub"
 	"go.chrisrx.dev/x/env/testdata/spanner"
+	"go.chrisrx.dev/x/must"
 	"go.chrisrx.dev/x/ptr"
 )
 
@@ -62,7 +63,7 @@ func TestEnv(t *testing.T) {
 }
 
 func TestParse(t *testing.T) {
-	t.Run("nested structs", func(t *testing.T) {
+	t.Run("embedded structs", func(t *testing.T) {
 		assert.WithEnviron(t, map[string]string{
 			"LOG_LEVEL":      "DEBUG",
 			"LOG_FORMAT":     "json",
@@ -96,13 +97,18 @@ func TestParse(t *testing.T) {
 		})
 	})
 
-	t.Run("embedded structs", func(t *testing.T) {
+	t.Run("nested structs", func(t *testing.T) {
 		assert.WithEnviron(t, map[string]string{
-			"USERS_SPANNER_PROJECT":     "test-project",
-			"USERS_SPANNER_INSTANCE":    "test-instance",
-			"USERS_SPANNER_DATABASE":    "test-database",
-			"TASKS_PUBSUB_TOPIC":        "test-pubsub-topic",
-			"TASKS_PUBSUB_SUBSCRIPTION": "test-pubsub-subscription",
+			"USERS_SPANNER_PROJECT":          "test-project",
+			"USERS_SPANNER_INSTANCE":         "test-instance",
+			"USERS_SPANNER_DATABASE":         "test-database",
+			"TASKS_PUBSUB_TOPIC":             "test-pubsub-topic",
+			"TASKS_PUBSUB_SUBSCRIPTION":      "test-pubsub-subscription",
+			"SELF_USERS_SPANNER_PROJECT":     "test-project-nested",
+			"SELF_USERS_SPANNER_INSTANCE":    "test-instance-nested",
+			"SELF_USERS_SPANNER_DATABASE":    "test-database-nested",
+			"SELF_TASKS_PUBSUB_TOPIC":        "test-pubsub-topic-nested",
+			"SELF_TASKS_PUBSUB_SUBSCRIPTION": "test-pubsub-subscription-nested",
 		}, func() {
 			type s struct {
 				Tasks pubsub.Config
@@ -123,6 +129,7 @@ func TestParse(t *testing.T) {
 			type s2 struct {
 				Tasks *pubsub.Config
 				Users spanner.Config
+				Self  s
 			}
 			assert.Equal(t, &s2{
 				Tasks: &pubsub.Config{
@@ -133,6 +140,17 @@ func TestParse(t *testing.T) {
 					Project:  "test-project",
 					Instance: "test-instance",
 					Database: "test-database",
+				},
+				Self: s{
+					Tasks: pubsub.Config{
+						Topic:        "test-pubsub-topic-nested",
+						Subscription: "test-pubsub-subscription-nested",
+					},
+					Users: spanner.Config{
+						Project:  "test-project-nested",
+						Instance: "test-instance-nested",
+						Database: "test-database-nested",
+					},
 				},
 			}, env.MustParseAs[*s2]())
 		})
@@ -158,11 +176,12 @@ func TestParse(t *testing.T) {
 
 	t.Run("slices", func(t *testing.T) {
 		assert.WithEnviron(t, map[string]string{
-			"STRING_SLICE":         "a,b,c",
-			"INT_SLICE":            "-1,0,1",
-			"INT32_SLICE":          "1,2,3",
-			"UINT_SLICE":           "1,2,3",
-			"STRING_POINTER_SLICE": "a,b,c",
+			"STRING_SLICE":          "a,b,c",
+			"INT_SLICE":             "-1,0,1",
+			"INT32_SLICE":           "1,2,3",
+			"UINT_SLICE":            "1,2,3",
+			"STRING_POINTER_SLICE":  "a,b,c",
+			"INVALID_POINTER_SLICE": "<invalid>",
 		}, func() {
 			type s struct {
 				StringSlice        []string  `env:"STRING_SLICE"`
@@ -177,8 +196,11 @@ func TestParse(t *testing.T) {
 				Int32Slice:         []int32{1, 2, 3},
 				UintSlice:          []uint{1, 2, 3},
 				StringPointerSlice: []*string{ptr.To("a"), ptr.To("b"), ptr.To("c")},
-			}, env.MustParseAs[s](),
-			)
+			}, env.MustParseAs[s]())
+
+			assert.Error(t, "received unhandled value:.*", must.Get1(env.ParseAs[struct {
+				S []*time.Location `env:"INVALID_POINTER_SLICE"`
+			}]()))
 		})
 	})
 
