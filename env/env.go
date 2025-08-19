@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"reflect"
-	"slices"
 	"strconv"
 	"time"
 
@@ -141,7 +140,7 @@ func (p *Parser) parse(rv reflect.Value, field Field) error {
 				prefixes = append(prefixes, strings.ToUpper(ns))
 			}
 		}
-		for i := range reflect.Indirect(rv).NumField() {
+		for i := range rv.NumField() {
 			fv := rv.Field(i)
 			field := GetField(rv.Type().Field(i))
 			if !p.RequireTagged && field.ShouldSkip() {
@@ -162,50 +161,17 @@ func (p *Parser) parse(rv reflect.Value, field Field) error {
 		}
 		return nil
 	}
-
-	switch rv.Kind() {
-	case reflect.Array, reflect.Slice:
-		et := rv.Type().Elem()
-		if !isSlice(et) {
-			return fmt.Errorf("received invalid slice element type: %v", et)
-		}
-		elems := slices.DeleteFunc(strings.Split(s, p.Separator), func(s string) bool {
-			return s == ""
-		})
-		if len(elems) == 0 {
-			return nil
-		}
-		sv := reflect.MakeSlice(reflect.SliceOf(et), len(elems), len(elems))
-		for i := range sv.Len() {
-			if err := p.set(sv.Index(i), elems[i], field); err != nil {
-				return err
-			}
-		}
-		rv.Set(sv)
-		return nil
-	default:
-		return p.set(rv, s, field)
-	}
+	return p.set(rv, s, field)
 }
 
 func isStruct(rv reflect.Value) bool {
 	if rv.Type().Kind() != reflect.Struct {
 		return false
 	}
-	if _, ok := Lookup(rv.Type()); ok {
+	if _, ok := LookupFunc(rv.Type()); ok {
 		return false
 	}
 	if _, ok := TypeAssert[encoding.TextUnmarshaler](rv); ok {
-		return false
-	}
-	return true
-}
-
-func isSlice(rt reflect.Type) bool {
-	if rt.Kind() == reflect.Pointer {
-		rt = rt.Elem()
-	}
-	if rt.Kind() == reflect.Array || rt.Kind() == reflect.Slice {
 		return false
 	}
 	return true
@@ -216,10 +182,17 @@ func (p *Parser) set(rv reflect.Value, s string, field Field) error {
 		panic(fmt.Errorf("cannot set value: %v", rv.Type()))
 	}
 
-	// First, check for customer parsers. This allows us to short circuit if we
-	// have a specific parser function. It is important that this checks first to
-	// enable overriding any default parsing for a value.
-	if fn, ok := Lookup(rv.Type()); ok {
+	if rv.Kind() == reflect.Pointer {
+		if rv.IsNil() {
+			rv.Set(reflect.New(rv.Type().Elem()))
+		}
+		return p.set(reflect.Indirect(rv), s, field)
+	}
+
+	// Check for customer parsers. This allows us to short circuit if we have a
+	// specific parser function. It is important that this checks first to enable
+	// overriding any default parsing for a value.
+	if fn, ok := LookupFunc(rv.Type()); ok {
 		v, err := fn(s, field)
 		if err != nil {
 			return err
@@ -227,17 +200,49 @@ func (p *Parser) set(rv reflect.Value, s string, field Field) error {
 		rv.Set(reflect.ValueOf(v))
 		return nil
 	}
-	// Check for common interfaces that would allow us to avoid additional
+
+	// Check for common interface(s) that would allow us to avoid additional
 	// parsing. Anything that implements [encoding.TextUnmarshaler] can be used
 	// to set the value.
 	if iface, ok := TypeAssert[encoding.TextUnmarshaler](rv); ok {
-		if err := iface.UnmarshalText([]byte(s)); err != nil {
-			return err
-		}
-		return nil
+		return iface.UnmarshalText([]byte(s))
 	}
 
 	switch rv.Kind() {
+	case reflect.Array, reflect.Slice:
+		et := rv.Type().Elem()
+		if !isSlice(et) {
+			return fmt.Errorf("received invalid slice element type: %v", et)
+		}
+		elems := strings.Split(s, p.Separator)
+		sv := reflect.MakeSlice(reflect.SliceOf(et), len(elems), len(elems))
+		for i := range sv.Len() {
+			if err := p.set(sv.Index(i), elems[i], field); err != nil {
+				return err
+			}
+		}
+		rv.Set(sv)
+		return nil
+	case reflect.Map:
+		elems := strings.Split(s, p.Separator)
+		mv := reflect.MakeMap(rv.Type())
+		for _, elem := range elems {
+			parts := strings.SplitN(elem, "=", 2)
+			if len(parts) != 2 {
+				return fmt.Errorf("cannot parse value into key/value pairs: %q", elem)
+			}
+			key := reflect.New(rv.Type().Key()).Elem()
+			if err := p.set(key, parts[0], field); err != nil {
+				return err
+			}
+			value := reflect.New(rv.Type().Elem()).Elem()
+			if err := p.set(value, parts[1], field); err != nil {
+				return err
+			}
+			mv.SetMapIndex(key, value)
+		}
+		rv.Set(mv)
+		return nil
 	case reflect.String:
 		rv.SetString(s)
 		return nil
@@ -276,14 +281,19 @@ func (p *Parser) set(rv reflect.Value, s string, field Field) error {
 		}
 		rv.SetFloat(f)
 		return nil
-	case reflect.Pointer:
-		if rv.IsNil() {
-			rv.Set(reflect.New(rv.Type().Elem()))
-		}
-		return p.set(reflect.Indirect(rv), s, field)
 	default:
 		return fmt.Errorf("received unhandled value: %T", rv.Interface())
 	}
+}
+
+func isSlice(rt reflect.Type) bool {
+	if rt.Kind() == reflect.Pointer {
+		rt = rt.Elem()
+	}
+	if rt.Kind() == reflect.Array || rt.Kind() == reflect.Slice {
+		return false
+	}
+	return true
 }
 
 type Field struct {

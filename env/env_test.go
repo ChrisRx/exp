@@ -203,6 +203,58 @@ func TestParse(t *testing.T) {
 			}]()))
 		})
 	})
+	t.Run("bytes", func(t *testing.T) {
+		assert.WithEnviron(t, map[string]string{
+			"BYTES": "hello",
+		}, func() {
+			opts := env.MustParseAs[struct {
+				Bytes []byte `env:"BYTES"`
+			}]()
+			assert.Equal(t, []byte("hello"), opts.Bytes)
+		})
+	})
+
+	t.Run("maps", func(t *testing.T) {
+		assert.WithEnviron(t, map[string]string{
+			"COOKIES":          "key1=value1,key2=value2,key3=value3",
+			"NUMBERS":          "key1=1,key2=2,key3=3",
+			"OOPS_ALL_NUMBERS": "1=1,2=2,3=3",
+			"DURATION":         "key1=10s,key2=20s,key3=30s",
+		}, func() {
+			opts := env.MustParseAs[struct {
+				Cookies     map[string]string         `env:"COOKIES"`
+				Numbers     map[string]int            `env:"NUMBERS"`
+				AllNumbers  map[int]int               `env:"OOPS_ALL_NUMBERS"`
+				Duration    map[string]time.Duration  `env:"DURATION"`
+				DurationPtr map[string]*time.Duration `env:"DURATION"`
+			}]()
+			assert.Equal(t, map[string]string{
+				"key1": "value1",
+				"key2": "value2",
+				"key3": "value3",
+			}, opts.Cookies)
+			assert.Equal(t, map[string]int{
+				"key1": 1,
+				"key2": 2,
+				"key3": 3,
+			}, opts.Numbers)
+			assert.Equal(t, map[int]int{
+				1: 1,
+				2: 2,
+				3: 3,
+			}, opts.AllNumbers)
+			assert.Equal(t, map[string]time.Duration{
+				"key1": 10 * time.Second,
+				"key2": 20 * time.Second,
+				"key3": 30 * time.Second,
+			}, opts.Duration)
+			assert.Equal(t, map[string]*time.Duration{
+				"key1": ptr.To(10 * time.Second),
+				"key2": ptr.To(20 * time.Second),
+				"key3": ptr.To(30 * time.Second),
+			}, opts.DurationPtr)
+		})
+	})
 
 	t.Run("complex", func(t *testing.T) {
 		assert.WithEnviron(t, map[string]string{

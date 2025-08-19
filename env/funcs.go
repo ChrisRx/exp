@@ -27,7 +27,7 @@ func Register[T any](fn CustomParserFunc) {
 	}
 }
 
-func Lookup(rt reflect.Type) (CustomParserFunc, bool) {
+func LookupFunc(rt reflect.Type) (CustomParserFunc, bool) {
 	if rt.Kind() == reflect.Pointer {
 		rt = rt.Elem()
 	}
@@ -58,5 +58,9 @@ func init() {
 			return nil, err
 		}
 		return ptr.From(u), nil
+	})
+
+	Register[[]byte](func(s string, field Field) (any, error) {
+		return []byte(s), nil
 	})
 }
