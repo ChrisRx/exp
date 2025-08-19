@@ -66,15 +66,21 @@ func MustParseAs[T any](opts ...ParserOption) T {
 
 type ParserOption func(*Parser)
 
-func RequireTagged() ParserOption {
+func DisableAutoPrefix() ParserOption {
 	return func(p *Parser) {
-		p.RequireTagged = true
+		p.DisableAutoPrefix = true
 	}
 }
 
-func DisableAutoTag() ParserOption {
+func Namespace(ns string) ParserOption {
 	return func(p *Parser) {
-		p.DisableAutoTag = true
+		p.Namespace = ns
+	}
+}
+
+func RequireTagged() ParserOption {
+	return func(p *Parser) {
+		p.RequireTagged = true
 	}
 }
 
@@ -85,10 +91,10 @@ func Separator(sep string) ParserOption {
 }
 
 type Parser struct {
-	Namespace      string
-	RequireTagged  bool
-	DisableAutoTag bool
-	Separator      string
+	DisableAutoPrefix bool
+	Namespace         string
+	RequireTagged     bool
+	Separator         string
 }
 
 func NewParser(opts ...ParserOption) *Parser {
@@ -141,7 +147,7 @@ func (p *Parser) parse(rv reflect.Value, field Field) error {
 		// anonymous (aka embedded).
 		prefixes := field.prefixes
 		switch {
-		case !p.DisableAutoTag && !field.Anonymous:
+		case !p.DisableAutoPrefix && !field.Anonymous:
 			prefixes = append(prefixes, cmp.Or(field.Env, field.Namespace, strings.ToSnakeCase(field.Name)))
 		default:
 			prefixes = append(prefixes, cmp.Or(field.Env, field.Namespace))
