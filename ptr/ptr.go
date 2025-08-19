@@ -57,7 +57,7 @@ func Equal[T comparable](a, b *T) bool {
 }
 
 // IsZero returns true if value is the zero value for the type.
-func IsZero(v any) bool {
+func IsZero[T any](v T) bool {
 	rv := reflect.ValueOf(v)
 	if !rv.IsValid() {
 		return true

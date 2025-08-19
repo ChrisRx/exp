@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"go.chrisrx.dev/x/must"
+	"go.chrisrx.dev/x/ptr"
+	"go.chrisrx.dev/x/slices"
 	"go.chrisrx.dev/x/strings"
 )
 
@@ -101,20 +103,22 @@ func NewParser(opts ...ParserOption) *Parser {
 
 func (p *Parser) Parse(v any) error {
 	rv := reflect.ValueOf(v)
-	if rv.Kind() != reflect.Pointer || reflect.Indirect(rv).Kind() != reflect.Struct {
-		return fmt.Errorf("must be a pointer to a struct, received %T", v)
+	if rv.Kind() != reflect.Pointer {
+		return fmt.Errorf("must provide a struct or *struct, received %T", v)
 	}
 	rv = reflect.Indirect(rv)
+	if rv.Kind() != reflect.Struct {
+		return fmt.Errorf("must provide a struct or *struct, received %T", v)
+	}
+
+	// The parser namespace should be added to the initial fields if it is set to
+	// ensure the prefix is set for all child fields.
 	for i := range rv.NumField() {
-		fv := rv.Field(i)
-		field := GetField(rv.Type().Field(i))
+		field := GetField(rv.Type().Field(i), p.Namespace)
 		if !p.RequireTagged && field.ShouldSkip() {
 			return nil
 		}
-		if p.Namespace != "" {
-			field.prefixes = append(field.prefixes, p.Namespace)
-		}
-		if err := p.parse(fv, field); err != nil {
+		if err := p.parse(rv.Field(i), field); err != nil {
 			return err
 		}
 	}
@@ -122,46 +126,46 @@ func (p *Parser) Parse(v any) error {
 }
 
 func (p *Parser) parse(rv reflect.Value, field Field) error {
-	if rv.Kind() == reflect.Pointer {
+	switch {
+	case rv.Kind() == reflect.Pointer:
 		if rv.IsNil() {
+			// A nil pointer must have the underlying type initialized to be
+			// settable.
 			rv.Set(reflect.New(rv.Type().Elem()))
 		}
 		return p.parse(reflect.Indirect(rv), field)
-	}
-
-	if isStruct(rv) {
-		// Add to the prefix when a field is not embedded. If auto tagging is
-		// disabled then no prefixes are added. If the env or namespace tag is set,
-		// those are preferred, otherwise it uses the parent field name.
+	case isStruct(rv):
+		// Any prefixes from the parent field should be added to child fields. An
+		// additional prefix will added if either env or namespace tags are
+		// set, or if auto prefix is not disabled and the parent field wasn't
+		// anonymous (aka embedded).
 		prefixes := field.prefixes
-		if !p.DisableAutoTag && !field.Anonymous {
-			ns := cmp.Or(field.Env, field.Namespace, strings.ToSnakeCase(field.Name))
-			if ns != "" {
-				prefixes = append(prefixes, strings.ToUpper(ns))
-			}
+		switch {
+		case !p.DisableAutoTag && !field.Anonymous:
+			prefixes = append(prefixes, cmp.Or(field.Env, field.Namespace, strings.ToSnakeCase(field.Name)))
+		default:
+			prefixes = append(prefixes, cmp.Or(field.Env, field.Namespace))
 		}
 		for i := range rv.NumField() {
-			fv := rv.Field(i)
-			field := GetField(rv.Type().Field(i))
+			field := GetField(rv.Type().Field(i), prefixes...)
 			if !p.RequireTagged && field.ShouldSkip() {
 				return nil
 			}
-			field.prefixes = append(field.prefixes, prefixes...)
-			if err := p.parse(fv, field); err != nil {
+			if err := p.parse(rv.Field(i), field); err != nil {
 				return err
 			}
 		}
 		return nil
-	}
-
-	s, ok := field.Get()
-	if !ok || s == "" {
-		if p.RequireTagged || field.Required {
-			return fmt.Errorf("required field not set: %v", field.Key())
+	default:
+		s, ok := field.Get()
+		if !ok || s == "" {
+			if p.RequireTagged || field.Required {
+				return fmt.Errorf("required field not set: %v", field.Key())
+			}
+			return nil
 		}
-		return nil
+		return p.set(rv, field, s)
 	}
-	return p.set(rv, s, field)
 }
 
 func isStruct(rv reflect.Value) bool {
@@ -177,7 +181,7 @@ func isStruct(rv reflect.Value) bool {
 	return true
 }
 
-func (p *Parser) set(rv reflect.Value, s string, field Field) error {
+func (p *Parser) set(rv reflect.Value, field Field, s string) error {
 	if !rv.CanSet() {
 		panic(fmt.Errorf("cannot set value: %v", rv.Type()))
 	}
@@ -186,12 +190,11 @@ func (p *Parser) set(rv reflect.Value, s string, field Field) error {
 		if rv.IsNil() {
 			rv.Set(reflect.New(rv.Type().Elem()))
 		}
-		return p.set(reflect.Indirect(rv), s, field)
+		return p.set(reflect.Indirect(rv), field, s)
 	}
 
-	// Check for customer parsers. This allows us to short circuit if we have a
-	// specific parser function. It is important that this checks first to enable
-	// overriding any default parsing for a value.
+	// When a type-specific parser function is available, this is preferred to
+	// continuing default parsing.
 	if fn, ok := LookupFunc(rv.Type()); ok {
 		v, err := fn(s, field)
 		if err != nil {
@@ -201,9 +204,8 @@ func (p *Parser) set(rv reflect.Value, s string, field Field) error {
 		return nil
 	}
 
-	// Check for common interface(s) that would allow us to avoid additional
-	// parsing. Anything that implements [encoding.TextUnmarshaler] can be used
-	// to set the value.
+	// Common interfaces, like [encoding.TextUnmarshaler], can be used to set the
+	// field value.
 	if iface, ok := TypeAssert[encoding.TextUnmarshaler](rv); ok {
 		return iface.UnmarshalText([]byte(s))
 	}
@@ -212,12 +214,13 @@ func (p *Parser) set(rv reflect.Value, s string, field Field) error {
 	case reflect.Array, reflect.Slice:
 		et := rv.Type().Elem()
 		if !isSlice(et) {
+			// Slices of slices are not supported.
 			return fmt.Errorf("received invalid slice element type: %v", et)
 		}
 		elems := strings.Split(s, p.Separator)
 		sv := reflect.MakeSlice(reflect.SliceOf(et), len(elems), len(elems))
 		for i := range sv.Len() {
-			if err := p.set(sv.Index(i), elems[i], field); err != nil {
+			if err := p.set(sv.Index(i), field, elems[i]); err != nil {
 				return err
 			}
 		}
@@ -232,11 +235,11 @@ func (p *Parser) set(rv reflect.Value, s string, field Field) error {
 				return fmt.Errorf("cannot parse value into key/value pairs: %q", elem)
 			}
 			key := reflect.New(rv.Type().Key()).Elem()
-			if err := p.set(key, parts[0], field); err != nil {
+			if err := p.set(key, field, parts[0]); err != nil {
 				return err
 			}
 			value := reflect.New(rv.Type().Elem()).Elem()
-			if err := p.set(value, parts[1], field); err != nil {
+			if err := p.set(value, field, parts[1]); err != nil {
 				return err
 			}
 			mv.SetMapIndex(key, value)
@@ -311,17 +314,18 @@ type Field struct {
 	prefixes []string
 }
 
-func GetField(ft reflect.StructField) Field {
+func GetField(st reflect.StructField, prefixes ...string) Field {
 	return Field{
-		Name:      ft.Name,
-		Type:      IndirectType(ft.Type),
-		Anonymous: ft.Anonymous,
-		Env:       ft.Tag.Get("env"),
-		Namespace: ft.Tag.Get("namespace"),
-		Default:   ft.Tag.Get("default"),
-		Required:  must.Get0(strconv.ParseBool(ft.Tag.Get("required"))),
-		Ignored:   ft.Tag.Get("env") == "-",
-		Layout:    cmp.Or(ft.Tag.Get("layout"), time.RFC3339Nano),
+		Name:      st.Name,
+		Type:      IndirectType(st.Type),
+		Anonymous: st.Anonymous,
+		Env:       st.Tag.Get("env"),
+		Namespace: st.Tag.Get("namespace"),
+		Default:   st.Tag.Get("default"),
+		Required:  must.Get0(strconv.ParseBool(st.Tag.Get("required"))),
+		Ignored:   st.Tag.Get("env") == "-",
+		Layout:    cmp.Or(st.Tag.Get("layout"), time.RFC3339Nano),
+		prefixes:  slices.Map(slices.DeleteFunc(prefixes, ptr.IsZero), strings.ToUpper),
 	}
 }
 
