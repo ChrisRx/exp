@@ -4,12 +4,12 @@ import (
 	"cmp"
 	"encoding"
 	"fmt"
-	"log/slog"
 	"os"
 	"reflect"
 	"strconv"
 	"time"
 
+	"go.chrisrx.dev/x/expr"
 	"go.chrisrx.dev/x/must"
 	"go.chrisrx.dev/x/ptr"
 	"go.chrisrx.dev/x/slices"
@@ -43,15 +43,32 @@ func ParseAs[T any](opts ...ParserOption) (T, error) {
 		}
 		return v, nil
 	}
-	v, ok := TypeAssert[T](rv)
+	v, ok := typeAssert[T](rv)
 	if !ok {
-		var zero T
-		return zero, fmt.Errorf("invalid type: %v", v)
+		return v, fmt.Errorf("invalid type: %v", v)
 	}
 	if err := Parse(v, opts...); err != nil {
 		return v, err
 	}
 	return v, nil
+}
+
+func typeAssert[T any](rv reflect.Value) (T, bool) {
+	rt := reflect.TypeFor[T]()
+	if rt.Kind() != reflect.Interface {
+		if rv.Type().Kind() == reflect.Pointer && rv.IsNil() {
+			rv = reflect.New(rt.Elem())
+		}
+	}
+	if rv.CanAddr() {
+		rv = rv.Addr()
+	}
+	if !rv.CanInterface() {
+		var zero T
+		return zero, false
+	}
+	v, ok := rv.Interface().(T)
+	return v, ok
 }
 
 // MustParseAs is a convenience function for calling [ParseAs] that panics if
@@ -84,23 +101,14 @@ func RequireTagged() ParserOption {
 	}
 }
 
-func Separator(sep string) ParserOption {
-	return func(p *Parser) {
-		p.Separator = sep
-	}
-}
-
 type Parser struct {
 	DisableAutoPrefix bool
 	Namespace         string
 	RequireTagged     bool
-	Separator         string
 }
 
 func NewParser(opts ...ParserOption) *Parser {
-	p := &Parser{
-		Separator: ",",
-	}
+	p := &Parser{}
 	for _, opt := range opts {
 		opt(p)
 	}
@@ -110,17 +118,17 @@ func NewParser(opts ...ParserOption) *Parser {
 func (p *Parser) Parse(v any) error {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Pointer {
-		return fmt.Errorf("must provide a struct or *struct, received %T", v)
+		return fmt.Errorf("must provide a struct pointer, received %T", v)
 	}
 	rv = reflect.Indirect(rv)
 	if rv.Kind() != reflect.Struct {
-		return fmt.Errorf("must provide a struct or *struct, received %T", v)
+		return fmt.Errorf("must provide a struct pointer, received %T", v)
 	}
 
 	// The parser namespace should be added to the initial fields if it is set to
 	// ensure the prefix is set for all child fields.
 	for i := range rv.NumField() {
-		field := GetField(rv.Type().Field(i), p.Namespace)
+		field := NewField(rv, i, p.Namespace)
 		if !p.RequireTagged && field.ShouldSkip() {
 			return nil
 		}
@@ -153,7 +161,7 @@ func (p *Parser) parse(rv reflect.Value, field Field) error {
 			prefixes = append(prefixes, cmp.Or(field.Env, field.Namespace))
 		}
 		for i := range rv.NumField() {
-			field := GetField(rv.Type().Field(i), prefixes...)
+			field := NewField(rv, i, prefixes...)
 			if !p.RequireTagged && field.ShouldSkip() {
 				return nil
 			}
@@ -163,17 +171,15 @@ func (p *Parser) parse(rv reflect.Value, field Field) error {
 		}
 		return nil
 	default:
-		s, ok := field.Get()
-		if !ok || s == "" {
-			if p.RequireTagged || field.Required {
-				return fmt.Errorf("required field not set: %v", field.Key())
-			}
-			return nil
-		}
-		return p.set(rv, field, s)
+		return field.Set(rv)
 	}
 }
 
+// isStruct checks if the provided value is a struct that doesn't have a custom
+// parser or implement a common interface. This is important to prevent ranging
+// over fields for types like [time.Time], where it is a struct but the fields
+// aren't meaningful and we have a parser registered that already knows how to
+// handle it optimally.
 func isStruct(rv reflect.Value) bool {
 	if rv.Type().Kind() != reflect.Struct {
 		return false
@@ -181,28 +187,91 @@ func isStruct(rv reflect.Value) bool {
 	if _, ok := LookupFunc(rv.Type()); ok {
 		return false
 	}
-	if _, ok := TypeAssert[encoding.TextUnmarshaler](rv); ok {
+	if _, ok := typeAssert[encoding.TextUnmarshaler](rv); ok {
 		return false
 	}
 	return true
 }
 
-func (p *Parser) set(rv reflect.Value, field Field, s string) error {
+type Field struct {
+	Name      string
+	Type      reflect.Type
+	Anonymous bool
+
+	Env       string
+	Namespace string
+	Default   string
+	Separator string
+	Required  bool
+	Ignored   bool
+	Layout    string
+
+	prefixes []string
+}
+
+func NewField(rv reflect.Value, index int, prefixes ...string) Field {
+	st := rv.Type().Field(index)
+	return Field{
+		Name:      st.Name,
+		Type:      indirectType(st.Type),
+		Anonymous: st.Anonymous,
+		Env:       st.Tag.Get("env"),
+		Namespace: st.Tag.Get("namespace"),
+		Default:   st.Tag.Get("default"),
+		Separator: cmp.Or(st.Tag.Get("sep"), ","),
+		Required:  must.Get0(strconv.ParseBool(st.Tag.Get("required"))),
+		Ignored:   st.Tag.Get("env") == "-",
+		Layout:    cmp.Or(st.Tag.Get("layout"), time.RFC3339Nano),
+		prefixes:  slices.Map(slices.DeleteFunc(prefixes, ptr.IsZero), strings.ToUpper),
+	}
+}
+
+func (f Field) Key() string {
+	return strings.Join(append(f.prefixes, f.Env), "_")
+}
+
+func (f Field) ShouldSkip() bool {
+	return f.Type.Kind() != reflect.Struct && (f.Ignored || f.Env == "")
+}
+
+func (f Field) Set(rv reflect.Value) error {
+	s, ok := os.LookupEnv(f.Key())
+	if !ok {
+		if f.Default != "" {
+			if isExpr(f.Default) {
+				v, err := eval(f.Default)
+				if err != nil {
+					return err
+				}
+				rv.Set(v)
+				return nil
+			}
+			return f.set(rv, f.Default)
+		}
+		if f.Required {
+			return fmt.Errorf("required field not set: %v", f.Key())
+		}
+		return nil
+	}
+	return f.set(rv, s)
+}
+
+func (f Field) set(rv reflect.Value, s string) error {
 	if !rv.CanSet() {
-		panic(fmt.Errorf("cannot set value: %v", rv.Type()))
+		panic(fmt.Errorf("cannot set value: %v", f.Type))
 	}
 
 	if rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
 			rv.Set(reflect.New(rv.Type().Elem()))
 		}
-		return p.set(reflect.Indirect(rv), field, s)
+		return f.set(reflect.Indirect(rv), s)
 	}
 
 	// When a type-specific parser function is available, this is preferred to
 	// continuing default parsing.
 	if fn, ok := LookupFunc(rv.Type()); ok {
-		v, err := fn(s, field)
+		v, err := fn(s, f)
 		if err != nil {
 			return err
 		}
@@ -212,28 +281,29 @@ func (p *Parser) set(rv reflect.Value, field Field, s string) error {
 
 	// Common interfaces, like [encoding.TextUnmarshaler], can be used to set the
 	// field value.
-	if iface, ok := TypeAssert[encoding.TextUnmarshaler](rv); ok {
+	if iface, ok := typeAssert[encoding.TextUnmarshaler](rv); ok {
 		return iface.UnmarshalText([]byte(s))
 	}
 
 	switch rv.Kind() {
 	case reflect.Array, reflect.Slice:
 		et := rv.Type().Elem()
-		if !isSlice(et) {
+		switch indirectType(et).Kind() {
+		case reflect.Array, reflect.Slice:
 			// Slices of slices are not supported.
 			return fmt.Errorf("received invalid slice element type: %v", et)
 		}
-		elems := strings.Split(s, p.Separator)
+		elems := strings.Split(s, f.Separator)
 		sv := reflect.MakeSlice(reflect.SliceOf(et), len(elems), len(elems))
 		for i := range sv.Len() {
-			if err := p.set(sv.Index(i), field, elems[i]); err != nil {
+			if err := f.set(sv.Index(i), elems[i]); err != nil {
 				return err
 			}
 		}
 		rv.Set(sv)
 		return nil
 	case reflect.Map:
-		elems := strings.Split(s, p.Separator)
+		elems := strings.Split(s, f.Separator)
 		mv := reflect.MakeMap(rv.Type())
 		for _, elem := range elems {
 			parts := strings.SplitN(elem, "=", 2)
@@ -241,11 +311,11 @@ func (p *Parser) set(rv reflect.Value, field Field, s string) error {
 				return fmt.Errorf("cannot parse value into key/value pairs: %q", elem)
 			}
 			key := reflect.New(rv.Type().Key()).Elem()
-			if err := p.set(key, field, parts[0]); err != nil {
+			if err := f.set(key, parts[0]); err != nil {
 				return err
 			}
 			value := reflect.New(rv.Type().Elem()).Elem()
-			if err := p.set(value, field, parts[1]); err != nil {
+			if err := f.set(value, parts[1]); err != nil {
 				return err
 			}
 			mv.SetMapIndex(key, value)
@@ -295,83 +365,17 @@ func (p *Parser) set(rv reflect.Value, field Field, s string) error {
 	}
 }
 
-func isSlice(rt reflect.Type) bool {
-	if rt.Kind() == reflect.Pointer {
-		rt = rt.Elem()
-	}
-	if rt.Kind() == reflect.Array || rt.Kind() == reflect.Slice {
-		return false
-	}
-	return true
-}
-
-type Field struct {
-	Name      string
-	Type      reflect.Type
-	Anonymous bool
-
-	Env       string
-	Namespace string
-	Default   string
-	Required  bool
-	Ignored   bool
-	Layout    string
-
-	prefixes []string
-}
-
-func GetField(st reflect.StructField, prefixes ...string) Field {
-	return Field{
-		Name:      st.Name,
-		Type:      IndirectType(st.Type),
-		Anonymous: st.Anonymous,
-		Env:       st.Tag.Get("env"),
-		Namespace: st.Tag.Get("namespace"),
-		Default:   st.Tag.Get("default"),
-		Required:  must.Get0(strconv.ParseBool(st.Tag.Get("required"))),
-		Ignored:   st.Tag.Get("env") == "-",
-		Layout:    cmp.Or(st.Tag.Get("layout"), time.RFC3339Nano),
-		prefixes:  slices.Map(slices.DeleteFunc(prefixes, ptr.IsZero), strings.ToUpper),
-	}
-}
-
-func (f Field) Get() (s string, ok bool) {
-	slog.Debug("get env value", slog.String("key", f.Key()))
-	if s, ok := os.LookupEnv(f.Key()); ok {
-		return s, true
-	}
-	return f.Default, f.Default != ""
-}
-
-func (f Field) Key() string {
-	return strings.Join(append(f.prefixes, f.Env), "_")
-}
-
-func (f Field) ShouldSkip() bool {
-	return f.Type.Kind() != reflect.Struct && (f.Ignored || f.Env == "")
-}
-
-func TypeAssert[T any](rv reflect.Value) (T, bool) {
-	rt := reflect.TypeFor[T]()
-	if rt.Kind() != reflect.Interface {
-		if rv.Type().Kind() == reflect.Pointer && rv.IsNil() {
-			rv = reflect.New(rt.Elem())
-		}
-	}
-	if rv.CanAddr() {
-		rv = rv.Addr()
-	}
-	if !rv.CanInterface() {
-		var zero T
-		return zero, false
-	}
-	v, ok := rv.Interface().(T)
-	return v, ok
-}
-
-func IndirectType(rt reflect.Type) reflect.Type {
+func indirectType(rt reflect.Type) reflect.Type {
 	if rt.Kind() == reflect.Pointer {
 		rt = rt.Elem()
 	}
 	return rt
+}
+
+func isExpr(s string) bool {
+	return strings.HasPrefix(s, "$(") && strings.HasSuffix(s, ")")
+}
+
+func eval(s string) (reflect.Value, error) {
+	return expr.Eval(strings.TrimSuffix(strings.TrimPrefix(s, "$("), ")"))
 }

@@ -169,7 +169,8 @@ func TestParse(t *testing.T) {
 		}, env.MustParseAs[s]())
 
 		var opts = env.MustParseAs[struct {
-			Time time.Time `env:"DEFAULT_TIME" default:"time.Now()"`
+			Time   time.Time `env:"DEFAULT_TIME" default:"$(time.Now())"`
+			String string    `env:"DEFAULT_STRING" default:"$(time.Now().Format("2006-01-02"))"`
 		}]()
 		assert.WithinDuration(t, time.Now(), opts.Time, 10*time.Millisecond)
 	})
@@ -340,5 +341,12 @@ func TestParse(t *testing.T) {
 			assert.Equal(t, &CustomType{S: "hi"}, opts.CustomTypePtr)
 
 		})
+	})
+
+	t.Run("expressions", func(t *testing.T) {
+		opts := env.MustParseAs[struct {
+			Result string `env:"RESULT" default:"$(fmt.Sprint(math.Round(math.Cos(45)*180)))"`
+		}]()
+		assert.Equal(t, "95", opts.Result)
 	})
 }
