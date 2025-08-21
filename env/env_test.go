@@ -1,6 +1,10 @@
 package env_test
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -317,11 +321,20 @@ func TestParse(t *testing.T) {
 		env.Register[CustomType](func(field env.Field, s string) (any, error) {
 			return CustomType{S: s}, nil
 		})
+		priv, err := rsa.GenerateKey(rand.Reader, 1024)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pub, err := x509.MarshalPKIXPublicKey(&priv.PublicKey)
+		if err != nil {
+			t.Fatal(err)
+		}
 		assert.WithEnviron(t, map[string]string{
 			"DURATION":     "10s",
 			"DURATION_PTR": "90s",
 			"URL":          "https://www.google.com",
 			"CUSTOM_TYPE":  "hi",
+			"RSA_PUBKEY":   string(pem.EncodeToMemory(&pem.Block{Bytes: pub})),
 		}, func() {
 			opts := env.MustParseAs[struct {
 				Duration      time.Duration  `env:"DURATION"`
@@ -330,6 +343,7 @@ func TestParse(t *testing.T) {
 				URLPtr        *url.URL       `env:"URL"`
 				CustomType    CustomType     `env:"CUSTOM_TYPE"`
 				CustomTypePtr *CustomType    `env:"CUSTOM_TYPE"`
+				PubKey        *rsa.PublicKey `env:"RSA_PUBKEY"`
 			}]()
 
 			assert.Equal(t, 10*time.Second, opts.Duration)
@@ -339,7 +353,7 @@ func TestParse(t *testing.T) {
 			assert.Equal(t, 10*time.Second, opts.Duration)
 			assert.Equal(t, CustomType{S: "hi"}, opts.CustomType)
 			assert.Equal(t, &CustomType{S: "hi"}, opts.CustomTypePtr)
-
+			assert.Equal(t, &priv.PublicKey, opts.PubKey)
 		})
 	})
 

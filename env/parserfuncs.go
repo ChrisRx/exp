@@ -1,12 +1,16 @@
 package env
 
 import (
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"net"
 	"net/url"
 	"reflect"
 	"time"
 
+	"go.chrisrx.dev/x/must"
 	"go.chrisrx.dev/x/ptr"
 )
 
@@ -37,6 +41,17 @@ func init() {
 
 	Register[net.IP](func(field Field, s string) (any, error) {
 		return net.ParseIP(s), nil
+	})
+
+	Register[rsa.PublicKey](func(field Field, s string) (any, error) {
+		pub, err := x509.ParsePKIXPublicKey(must.Get0(pem.Decode([]byte(s))).Bytes)
+		if err != nil {
+			return nil, err
+		}
+		if key, ok := pub.(*rsa.PublicKey); ok {
+			return ptr.From(key), nil
+		}
+		return nil, fmt.Errorf("expected *rsa.PublicKey, received %T", pub)
 	})
 }
 
