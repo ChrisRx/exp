@@ -310,11 +310,11 @@ func TestParse(t *testing.T) {
 			S string
 		}
 		assert.Panic(t, fmt.Errorf("cannot register type %T: must not be pointer", &CustomType{}), func() {
-			env.Register[*CustomType](func(s string, field env.Field) (any, error) {
+			env.Register[*CustomType](func(field env.Field, s string) (any, error) {
 				return CustomType{S: s}, nil
 			})
 		})
-		env.Register[CustomType](func(s string, field env.Field) (any, error) {
+		env.Register[CustomType](func(field env.Field, s string) (any, error) {
 			return CustomType{S: s}, nil
 		})
 		assert.WithEnviron(t, map[string]string{

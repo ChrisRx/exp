@@ -130,7 +130,7 @@ func (p *Parser) Parse(v any) error {
 	for i := range rv.NumField() {
 		field := NewField(rv, i, p.Namespace)
 		if !p.RequireTagged && field.ShouldSkip() {
-			return nil
+			continue
 		}
 		if err := p.parse(rv.Field(i), field); err != nil {
 			return err
@@ -163,7 +163,7 @@ func (p *Parser) parse(rv reflect.Value, field Field) error {
 		for i := range rv.NumField() {
 			field := NewField(rv, i, prefixes...)
 			if !p.RequireTagged && field.ShouldSkip() {
-				return nil
+				continue
 			}
 			if err := p.parse(rv.Field(i), field); err != nil {
 				return err
@@ -184,7 +184,7 @@ func isStruct(rv reflect.Value) bool {
 	if rv.Type().Kind() != reflect.Struct {
 		return false
 	}
-	if _, ok := LookupFunc(rv.Type()); ok {
+	if _, ok := customParserFuncs[indirectType(rv.Type())]; ok {
 		return false
 	}
 	if _, ok := typeAssert[encoding.TextUnmarshaler](rv); ok {
@@ -270,8 +270,8 @@ func (f Field) set(rv reflect.Value, s string) error {
 
 	// When a type-specific parser function is available, this is preferred to
 	// continuing default parsing.
-	if fn, ok := LookupFunc(rv.Type()); ok {
-		v, err := fn(s, f)
+	if fn, ok := customParserFuncs[indirectType(rv.Type())]; ok {
+		v, err := fn(f, s)
 		if err != nil {
 			return err
 		}
