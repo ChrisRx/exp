@@ -31,10 +31,10 @@ func MustParse(v any, opts ...ParserOption) {
 	}
 }
 
-// ParseAs parses tags for the provided struct and sets values from environment
+// ParseFor parses tags for the provided struct and sets values from environment
 // variables. It accepts a struct or pointer to a struct. If a non-pointer, a
 // copy of the struct with values set will be returned.
-func ParseAs[T any](opts ...ParserOption) (T, error) {
+func ParseFor[T any](opts ...ParserOption) (T, error) {
 	rv := reflect.New(reflect.TypeFor[T]()).Elem()
 	if rv.Kind() != reflect.Pointer {
 		v := rv.Interface().(T)
@@ -71,10 +71,10 @@ func typeAssert[T any](rv reflect.Value) (T, bool) {
 	return v, ok
 }
 
-// MustParseAs is a convenience function for calling [ParseAs] that panics if
+// MustParseFor is a convenience function for calling [ParseFor] that panics if
 // an error is encountered.
-func MustParseAs[T any](opts ...ParserOption) T {
-	v, err := ParseAs[T](opts...)
+func MustParseFor[T any](opts ...ParserOption) T {
+	v, err := ParseFor[T](opts...)
 	if err != nil {
 		panic(err)
 	}

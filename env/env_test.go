@@ -45,7 +45,7 @@ func TestEnv(t *testing.T) {
 		}
 
 		t.Run("anonymous struct", func(t *testing.T) {
-			var opts = env.MustParseAs[struct {
+			var opts = env.MustParseFor[struct {
 				Tasks pubsub.Config
 				Users spanner.Config
 			}]()
@@ -83,7 +83,7 @@ func TestParse(t *testing.T) {
 					Format:    log.JSONFormat,
 					AddSource: true,
 				},
-			}, env.MustParseAs[struct{ *log.Options }](),
+			}, env.MustParseFor[struct{ *log.Options }](),
 			)
 
 			assert.Equal(t, struct{ log.Options }{
@@ -96,7 +96,7 @@ func TestParse(t *testing.T) {
 					Format:    log.JSONFormat,
 					AddSource: true,
 				},
-			}, env.MustParseAs[struct{ log.Options }](),
+			}, env.MustParseFor[struct{ log.Options }](),
 			)
 		})
 	})
@@ -128,7 +128,7 @@ func TestParse(t *testing.T) {
 					Instance: "test-instance",
 					Database: "test-database",
 				},
-			}, env.MustParseAs[s]())
+			}, env.MustParseFor[s]())
 
 			type s2 struct {
 				Tasks *pubsub.Config
@@ -156,7 +156,7 @@ func TestParse(t *testing.T) {
 						Database: "test-database-nested",
 					},
 				},
-			}, env.MustParseAs[*s2]())
+			}, env.MustParseFor[*s2]())
 		})
 	})
 
@@ -170,9 +170,9 @@ func TestParse(t *testing.T) {
 			String:   "default string",
 			Duration: 10 * time.Minute,
 			Time:     time.Date(2020, 12, 30, 0, 0, 0, 0, time.UTC),
-		}, env.MustParseAs[s]())
+		}, env.MustParseFor[s]())
 
-		var opts = env.MustParseAs[struct {
+		var opts = env.MustParseFor[struct {
 			Time    time.Time `env:"DEFAULT_TIME" $default:"now()"`
 			String  string    `env:"DEFAULT_STRING" $default:"now().format('2006-01-02')"`
 			String2 string    `env:"DEFAULT_STRING" $default:"now()" layout:"2006-01-02"`
@@ -205,9 +205,9 @@ func TestParse(t *testing.T) {
 				Int32Slice:         []int32{1, 2, 3},
 				UintSlice:          []uint{1, 2, 3},
 				StringPointerSlice: []*string{ptr.To("a"), ptr.To("b"), ptr.To("c")},
-			}, env.MustParseAs[s]())
+			}, env.MustParseFor[s]())
 
-			assert.Error(t, "received unhandled value:.*", must.Get1(env.ParseAs[struct {
+			assert.Error(t, "received unhandled value:.*", must.Get1(env.ParseFor[struct {
 				S []*time.Location `env:"INVALID_POINTER_SLICE"`
 			}]()))
 		})
@@ -216,7 +216,7 @@ func TestParse(t *testing.T) {
 		assert.WithEnviron(t, map[string]string{
 			"BYTES": "hello",
 		}, func() {
-			opts := env.MustParseAs[struct {
+			opts := env.MustParseFor[struct {
 				Bytes []byte `env:"BYTES"`
 			}]()
 			assert.Equal(t, []byte("hello"), opts.Bytes)
@@ -230,7 +230,7 @@ func TestParse(t *testing.T) {
 			"OOPS_ALL_NUMBERS": "1=1,2=2,3=3",
 			"DURATION":         "key1=10s,key2=20s,key3=30s",
 		}, func() {
-			opts := env.MustParseAs[struct {
+			opts := env.MustParseFor[struct {
 				Cookies     map[string]string         `env:"COOKIES"`
 				Numbers     map[string]int            `env:"NUMBERS"`
 				AllNumbers  map[int]int               `env:"OOPS_ALL_NUMBERS"`
@@ -271,7 +271,7 @@ func TestParse(t *testing.T) {
 			"DATABASE_PORT": "5432",
 			"DATABASE_NAME": "postgres",
 		}, func() {
-			opts := env.MustParseAs[struct {
+			opts := env.MustParseFor[struct {
 				Database pg.Config
 			}]()
 
@@ -294,7 +294,7 @@ func TestParse(t *testing.T) {
 			"USERS_DB_CONNECT_TIMEOUT": "1m",
 			"USERS_DB_MAX_POOL_CONNS":  "100",
 		}, func() {
-			opts := env.MustParseAs[struct {
+			opts := env.MustParseFor[struct {
 				Database pg.Config `namespace:"USERS_DB"`
 			}]()
 
@@ -340,7 +340,7 @@ func TestParse(t *testing.T) {
 			"CUSTOM_TYPE":  "hi",
 			"RSA_PUBKEY":   string(pem.EncodeToMemory(&pem.Block{Bytes: pub})),
 		}, func() {
-			opts := env.MustParseAs[struct {
+			opts := env.MustParseFor[struct {
 				Duration      time.Duration  `env:"DURATION"`
 				DurationPtr   *time.Duration `env:"DURATION_PTR"`
 				URL           url.URL        `env:"URL"`
@@ -362,7 +362,7 @@ func TestParse(t *testing.T) {
 	})
 
 	t.Run("expressions", func(t *testing.T) {
-		opts := env.MustParseAs[struct {
+		opts := env.MustParseFor[struct {
 			Result0 string `env:"RESULT" $default:"fmt.Sprint(math.Round(math.Cos(45)*180))"`
 			Result1 string `env:"RESULT" $default:"sprint(math.Round(math.Cos(45)*180))"`
 			Result2 string `env:"RESULT" $default:"sprint(min(1,2))"`

@@ -18,7 +18,7 @@ A library for declaring composable, reusable Go structs that loads values parsed
 ## 📋 Usage
 
 ```go
-var opts = env.MustParseAs[struct {
+var opts = env.MustParseFor[struct {
     Timeout time.Duration `env:"TIMEOUT" default:"10m"`
     Start   time.Time     `env:"START" $default:"now()"`
 }]()
