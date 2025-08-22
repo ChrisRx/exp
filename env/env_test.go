@@ -173,10 +173,14 @@ func TestParse(t *testing.T) {
 		}, env.MustParseAs[s]())
 
 		var opts = env.MustParseAs[struct {
-			Time   time.Time `env:"DEFAULT_TIME" default:"$(time.Now())"`
-			String string    `env:"DEFAULT_STRING" default:"$(time.Now().Format("2006-01-02"))"`
+			Time    time.Time `env:"DEFAULT_TIME" $default:"now()"`
+			String  string    `env:"DEFAULT_STRING" $default:"now().format('2006-01-02')"`
+			String2 string    `env:"DEFAULT_STRING" $default:"now()" layout:"2006-01-02"`
+			Number  int       `env:"DEFAULT_NUMBER" $default:"5 + 6"`
 		}]()
 		assert.WithinDuration(t, time.Now(), opts.Time, 10*time.Millisecond)
+		assert.Equal(t, opts.String, opts.String2)
+		assert.Equal(t, 11, opts.Number)
 	})
 
 	t.Run("slices", func(t *testing.T) {
@@ -359,8 +363,12 @@ func TestParse(t *testing.T) {
 
 	t.Run("expressions", func(t *testing.T) {
 		opts := env.MustParseAs[struct {
-			Result string `env:"RESULT" default:"$(fmt.Sprint(math.Round(math.Cos(45)*180)))"`
+			Result0 string `env:"RESULT" $default:"fmt.Sprint(math.Round(math.Cos(45)*180))"`
+			Result1 string `env:"RESULT" $default:"sprint(math.Round(math.Cos(45)*180))"`
+			Result2 string `env:"RESULT" $default:"sprint(min(1,2))"`
 		}]()
-		assert.Equal(t, "95", opts.Result)
+		assert.Equal(t, "95", opts.Result0)
+		assert.Equal(t, "95", opts.Result1)
+		assert.Equal(t, "1", opts.Result2)
 	})
 }

@@ -7,6 +7,12 @@ import (
 	"go/token"
 	"reflect"
 	"strconv"
+	"time"
+	"unicode"
+	"unicode/utf8"
+
+	"go.chrisrx.dev/x/slices"
+	"go.chrisrx.dev/x/strings"
 )
 
 // TODO(ChrisRx): pass in variables map
@@ -14,12 +20,27 @@ import (
 // TODO(ChrisRx): make struct with default builtins/funcs that can be modified
 // with constructor options
 
+type Env map[string]any
+
 func Eval(s string) (reflect.Value, error) {
+	s = strings.ReplaceAll(s, `'`, `"`)
 	expr, err := parser.ParseExpr(s)
 	if err != nil {
 		return reflect.Value{}, err
 	}
 	return eval(expr)
+}
+
+func upper(s string) string {
+	r, size := utf8.DecodeRuneInString(s)
+	if r == utf8.RuneError && size <= 1 {
+		return s
+	}
+	return strings.Join(
+		slices.Map(
+			strings.Split(string(unicode.ToUpper(r))+s[size:], "_"),
+			strings.Title,
+		), "")
 }
 
 func eval(expr ast.Expr) (reflect.Value, error) {
@@ -83,6 +104,46 @@ func evalBinaryExpr(expr *ast.BinaryExpr) (reflect.Value, error) {
 		return reflect.Value{}, err
 	}
 
+	switch lhs := lhs.Interface().(type) {
+	case time.Duration:
+		switch rhs := rhs.Interface().(type) {
+		case time.Time:
+			switch expr.Op {
+			case token.ADD:
+				return reflect.ValueOf(rhs.Add(lhs)), nil
+			case token.SUB:
+				return reflect.ValueOf(rhs.Add(-lhs)), nil
+			}
+		case *time.Time:
+			switch expr.Op {
+			case token.ADD:
+				return reflect.ValueOf(rhs.Add(lhs)), nil
+			case token.SUB:
+				return reflect.ValueOf(rhs.Add(-lhs)), nil
+			}
+		}
+	case time.Time:
+		switch rhs := rhs.Interface().(type) {
+		case time.Duration:
+			switch expr.Op {
+			case token.ADD:
+				return reflect.ValueOf(lhs.Add(rhs)), nil
+			case token.SUB:
+				return reflect.ValueOf(lhs.Add(-rhs)), nil
+			}
+		}
+	case *time.Time:
+		switch rhs := rhs.Interface().(type) {
+		case time.Duration:
+			switch expr.Op {
+			case token.ADD:
+				return reflect.ValueOf(lhs.Add(rhs)), nil
+			case token.SUB:
+				return reflect.ValueOf(lhs.Add(-rhs)), nil
+			}
+		}
+	}
+
 	if lhs.Type() != rhs.Type() {
 		if !lhs.Type().ConvertibleTo(rhs.Type()) {
 			return reflect.Value{}, fmt.Errorf("invalid operation: operator %s on incompatible types: %v <> %v", expr.Op, lhs.Type(), rhs.Type())
@@ -93,7 +154,7 @@ func evalBinaryExpr(expr *ast.BinaryExpr) (reflect.Value, error) {
 	case lhs.CanFloat() || rhs.CanFloat():
 		floatType := reflect.TypeOf(float64(0))
 		lhs, rhs = lhs.Convert(floatType), rhs.Convert(floatType)
-	case lhs.CanInt() || lhs.CanUint():
+	case lhs.CanInt() && lhs.CanUint():
 		if lhs.Type().Bits() > rhs.Type().Bits() {
 			rhs = rhs.Convert(lhs.Type())
 		}
@@ -248,8 +309,8 @@ func evalCallExpr(expr *ast.CallExpr) (reflect.Value, error) {
 		// return reflect.Value{}, fmt.Errorf("unsupported *ast.CallExpr, must be function: (%v)(%v)", fn.Type(), fn)
 	}
 	var args []reflect.Value
-	if fn.Type().IsVariadic() {
-		vt := fn.Type().In(len(expr.Args) - fn.Type().NumIn()).Elem()
+	if fn.Type().IsVariadic() && len(expr.Args) >= fn.Type().NumIn() {
+		vt := fn.Type().In(max(fn.Type().NumIn()-1, 0)).Elem()
 		for _, arg := range expr.Args {
 			v, err := eval(arg)
 			if err != nil {
@@ -266,6 +327,13 @@ func evalCallExpr(expr *ast.CallExpr) (reflect.Value, error) {
 		}
 		results := fn.Call(args)
 		return results[0], nil
+	}
+	if len(expr.Args) != fn.Type().NumIn() && fn.Type().NumIn()-1 != len(expr.Args) {
+		name, ok := expr.Fun.(*ast.Ident)
+		if !ok {
+			name = &ast.Ident{Name: ""}
+		}
+		return reflect.Value{}, fmt.Errorf("func %s() takes %d args, received %d", name, fn.Type().NumIn(), len(expr.Args))
 	}
 	for i, arg := range expr.Args {
 		v, err := eval(arg)
@@ -326,6 +394,9 @@ func evalSelectorExpr(expr *ast.SelectorExpr) (reflect.Value, error) {
 			if fn, ok := pkg[sel.String()]; ok {
 				return fn, nil
 			}
+			if fn, ok := pkg[upper(sel.String())]; ok {
+				return fn, nil
+			}
 			return reflect.Value{}, fmt.Errorf("cannot find object in package: %s.%s", x, sel)
 		}
 		return reflect.Value{}, fmt.Errorf("cannot find package: %s", x)
@@ -334,7 +405,15 @@ func evalSelectorExpr(expr *ast.SelectorExpr) (reflect.Value, error) {
 		if method.IsValid() {
 			return method, nil
 		}
+		method = x.MethodByName(upper(sel.String()))
+		if method.IsValid() {
+			return method, nil
+		}
 		field := x.FieldByName(sel.String())
+		if field.IsValid() {
+			return field, nil
+		}
+		field = x.FieldByName(upper(sel.String()))
 		if field.IsValid() {
 			return field, nil
 		}

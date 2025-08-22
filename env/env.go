@@ -128,11 +128,7 @@ func (p *Parser) Parse(v any) error {
 	// The parser namespace should be added to the initial fields if it is set to
 	// ensure the prefix is set for all child fields.
 	for i := range rv.NumField() {
-		field := NewField(rv, i, p.Namespace)
-		if !p.RequireTagged && field.ShouldSkip() {
-			continue
-		}
-		if err := p.parse(rv.Field(i), field); err != nil {
+		if err := p.parse(rv.Field(i), NewField(rv, i, p.Namespace)); err != nil {
 			return err
 		}
 	}
@@ -161,16 +157,15 @@ func (p *Parser) parse(rv reflect.Value, field Field) error {
 			prefixes = append(prefixes, cmp.Or(field.Env, field.Namespace))
 		}
 		for i := range rv.NumField() {
-			field := NewField(rv, i, prefixes...)
-			if !p.RequireTagged && field.ShouldSkip() {
-				continue
-			}
-			if err := p.parse(rv.Field(i), field); err != nil {
+			if err := p.parse(rv.Field(i), NewField(rv, i, prefixes...)); err != nil {
 				return err
 			}
 		}
 		return nil
 	default:
+		if !p.RequireTagged && field.Env == "" {
+			return nil
+		}
 		return field.Set(rv)
 	}
 }
@@ -195,16 +190,16 @@ func isStruct(rv reflect.Value) bool {
 
 type Field struct {
 	Name      string
-	Type      reflect.Type
 	Anonymous bool
 
-	Env       string
-	Namespace string
-	Default   string
-	Separator string
-	Required  bool
-	Ignored   bool
-	Layout    string
+	// tags
+	Env         string
+	Namespace   string
+	Default     string
+	DefaultExpr string
+	Separator   string
+	Required    bool
+	Layout      string
 
 	prefixes []string
 }
@@ -212,17 +207,16 @@ type Field struct {
 func NewField(rv reflect.Value, index int, prefixes ...string) Field {
 	st := rv.Type().Field(index)
 	return Field{
-		Name:      st.Name,
-		Type:      indirectType(st.Type),
-		Anonymous: st.Anonymous,
-		Env:       st.Tag.Get("env"),
-		Namespace: st.Tag.Get("namespace"),
-		Default:   st.Tag.Get("default"),
-		Separator: cmp.Or(st.Tag.Get("sep"), ","),
-		Required:  must.Get0(strconv.ParseBool(st.Tag.Get("required"))),
-		Ignored:   st.Tag.Get("env") == "-",
-		Layout:    cmp.Or(st.Tag.Get("layout"), time.RFC3339Nano),
-		prefixes:  slices.Map(slices.DeleteFunc(prefixes, ptr.IsZero), strings.ToUpper),
+		Name:        st.Name,
+		Anonymous:   st.Anonymous,
+		Env:         st.Tag.Get("env"),
+		Namespace:   st.Tag.Get("namespace"),
+		Default:     st.Tag.Get("default"),
+		DefaultExpr: st.Tag.Get("$default"),
+		Separator:   cmp.Or(st.Tag.Get("sep"), ","),
+		Required:    must.Get0(strconv.ParseBool(st.Tag.Get("required"))),
+		Layout:      cmp.Or(st.Tag.Get("layout"), time.RFC3339Nano),
+		prefixes:    slices.Map(slices.DeleteFunc(prefixes, ptr.IsZero), strings.ToUpper),
 	}
 }
 
@@ -230,22 +224,28 @@ func (f Field) Key() string {
 	return strings.Join(append(f.prefixes, f.Env), "_")
 }
 
-func (f Field) ShouldSkip() bool {
-	return f.Type.Kind() != reflect.Struct && (f.Ignored || f.Env == "")
-}
-
 func (f Field) Set(rv reflect.Value) error {
 	s, ok := os.LookupEnv(f.Key())
 	if !ok {
-		if f.Default != "" {
-			if isExpr(f.Default) {
-				v, err := eval(f.Default)
-				if err != nil {
-					return err
-				}
-				rv.Set(v)
-				return nil
+		if f.DefaultExpr != "" {
+			v, err := expr.Eval(f.DefaultExpr)
+			if err != nil {
+				return err
 			}
+			if v.CanConvert(rv.Type()) {
+				v = v.Convert(rv.Type())
+			}
+			if v.Type().PkgPath() == "time" && v.Type().Name() == "Time" && rv.Kind() == reflect.String {
+				if method := v.MethodByName("Format"); method.IsValid() {
+					if results := method.Call([]reflect.Value{reflect.ValueOf(f.Layout)}); len(results) > 0 {
+						v = results[0]
+					}
+				}
+			}
+			rv.Set(v)
+			return nil
+		}
+		if f.Default != "" {
 			return f.set(rv, f.Default)
 		}
 		if f.Required {
@@ -258,7 +258,7 @@ func (f Field) Set(rv reflect.Value) error {
 
 func (f Field) set(rv reflect.Value, s string) error {
 	if !rv.CanSet() {
-		panic(fmt.Errorf("cannot set value: %v", f.Type))
+		panic(fmt.Errorf("cannot set value: %v", rv.Type()))
 	}
 
 	if rv.Kind() == reflect.Pointer {

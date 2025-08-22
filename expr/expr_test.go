@@ -1,13 +1,18 @@
-package expr_test
+package expr
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
 	"go.chrisrx.dev/x/assert"
-	"go.chrisrx.dev/x/expr"
 )
+
+type Something struct {
+	S string
+	N int
+}
 
 func TestEval(t *testing.T) {
 	cases := []struct {
@@ -17,14 +22,18 @@ func TestEval(t *testing.T) {
 	}{
 		{
 			input:    "time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)",
-			expected: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+			expected: testingTime,
 		},
 		{
 			input:    "time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC).Add(-1 * time.Minute)",
-			expected: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC).Add(-1 * time.Minute),
+			expected: testingTime.Add(-1 * time.Minute),
 		},
 		{
 			input:    `fmt.Sprintf("%s: %d", "count", 100)`,
+			expected: fmt.Sprintf("%s: %d", "count", 100),
+		},
+		{
+			input:    `sprintf("%s: %d", "count", 100)`,
 			expected: fmt.Sprintf("%s: %d", "count", 100),
 		},
 		{
@@ -53,12 +62,39 @@ func TestEval(t *testing.T) {
 		},
 		{
 			input:    `Something{S: "testing", N: 5}`,
-			expected: expr.Something{S: "testing", N: 5},
+			expected: Something{S: "testing", N: 5},
+		},
+		{
+			input:    `date(2020, 1, 1).add(duration("-1m"))`,
+			expected: testingTime.Add(-1 * time.Minute),
+		},
+		{
+			input:    `now().add(duration("-1m"))`,
+			expected: testingTime.Add(-1 * time.Minute),
+		},
+		{
+			input:    `now() + duration("-1m")`,
+			expected: testingTime.Add(-1 * time.Minute),
+		},
+		{
+			input:    `now().is_zero()`,
+			expected: false,
+		},
+		{
+			input:    `time.Time{}.is_zero()`,
+			expected: true,
+		},
+		{
+			input:    `(time.Time{}).is_zero()`,
+			expected: true,
 		},
 	}
 
+	isTesting = true
+	builtins["Something"] = reflect.ValueOf(Something{})
+
 	for _, tc := range cases {
-		v, err := expr.Eval(tc.input)
+		v, err := Eval(tc.input)
 		if err != nil {
 			t.Fatal(err)
 		}
