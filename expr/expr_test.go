@@ -9,6 +9,10 @@ import (
 	"go.chrisrx.dev/x/assert"
 )
 
+func init() {
+	enableTesting()
+}
+
 type Something struct {
 	S string
 	N int
@@ -90,7 +94,6 @@ func TestEval(t *testing.T) {
 		},
 	}
 
-	isTesting = true
 	builtins["Something"] = reflect.ValueOf(Something{})
 
 	for _, tc := range cases {

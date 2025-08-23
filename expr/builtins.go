@@ -5,12 +5,19 @@ import (
 	"math"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"go.chrisrx.dev/x/must"
+	"go.chrisrx.dev/x/ptr"
 )
 
-var isTesting bool
+var isTesting atomic.Bool
+
+func enableTesting() {
+	isTesting.Store(true)
+}
+
 var testingTime = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 
 var builtins = map[string]reflect.Value{
@@ -26,13 +33,19 @@ var builtins = map[string]reflect.Value{
 			return 0
 		}
 	}),
+	"some": reflect.ValueOf(func(v any) bool {
+		return !ptr.IsZero(v)
+	}),
+	"none": reflect.ValueOf(func(v any) bool {
+		return ptr.IsZero(v)
+	}),
 
 	// basic type casts
-	"int": reflect.ValueOf(func(v any) any {
+	"int": reflect.ValueOf(func(v any) int {
 		rv := reflect.ValueOf(v)
 		switch rv.Kind() {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			return rv.Int()
+			return int(rv.Int())
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 			return int(rv.Uint())
 		case reflect.Float32, reflect.Float64:
@@ -41,7 +54,7 @@ var builtins = map[string]reflect.Value{
 			return 0
 		}
 	}),
-	"float": reflect.ValueOf(func(v any) any {
+	"float": reflect.ValueOf(func(v any) float64 {
 		rv := reflect.ValueOf(v)
 		switch rv.Kind() {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -91,7 +104,7 @@ var builtins = map[string]reflect.Value{
 
 	// time
 	"now": reflect.ValueOf(func() time.Time {
-		if isTesting {
+		if isTesting.Load() {
 			return time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 		}
 		return time.Now()

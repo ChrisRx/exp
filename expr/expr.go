@@ -1,6 +1,7 @@
 package expr
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -20,15 +21,30 @@ import (
 // TODO(ChrisRx): make struct with default builtins/funcs that can be modified
 // with constructor options
 
-type Env map[string]any
+type Option func(*Expr)
 
-func Eval(s string) (reflect.Value, error) {
+func Env(env map[string]reflect.Value) Option {
+	return func(e *Expr) {
+		e.env = env
+	}
+}
+
+type Expr struct {
+	env map[string]reflect.Value
+}
+
+func Eval(s string, opts ...Option) (reflect.Value, error) {
 	s = strings.ReplaceAll(s, `'`, `"`)
 	expr, err := parser.ParseExpr(s)
 	if err != nil {
 		return reflect.Value{}, err
 	}
-	return eval(expr)
+	e := new(Expr)
+	for _, opt := range opts {
+		opt(e)
+	}
+	// TODO(ChrisRx): check if CanInterface()?
+	return e.eval(expr)
 }
 
 func upper(s string) string {
@@ -43,38 +59,46 @@ func upper(s string) string {
 		), "")
 }
 
-func eval(expr ast.Expr) (reflect.Value, error) {
+var errUndefined = errors.New("undefined")
+
+func (e *Expr) eval(expr ast.Expr) (reflect.Value, error) {
 	switch expr := expr.(type) {
 	case *ast.ParenExpr:
-		return eval(expr.X)
+		return e.eval(expr.X)
 	case *ast.StarExpr:
-		return eval(expr.X)
+		return e.eval(expr.X)
 	case *ast.CallExpr:
-		return evalCallExpr(expr)
+		return e.evalCallExpr(expr)
 	case *ast.SelectorExpr:
-		return evalSelectorExpr(expr)
+		return e.evalSelectorExpr(expr)
 	case *ast.Ident:
-		if builtin, ok := builtins[expr.Name]; ok {
-			return builtin, nil
+		if v, ok := e.env[expr.Name]; ok {
+			return v, nil
 		}
-		return reflect.ValueOf(expr.Name), nil
+		if v, ok := builtins[expr.Name]; ok {
+			return v, nil
+		}
+		if _, ok := packages()[expr.Name]; ok {
+			return reflect.ValueOf(expr.Name), nil
+		}
+		return reflect.Value{}, fmt.Errorf("%w: %v", errUndefined, expr.Name)
 	case *ast.BasicLit:
-		return evalBasicLit(expr)
+		return e.evalBasicLit(expr)
 	case *ast.CompositeLit:
-		return evalCompositeLit(expr)
+		return e.evalCompositeLit(expr)
 	case *ast.UnaryExpr:
-		return evalUnaryExpr(expr)
+		return e.evalUnaryExpr(expr)
 	case *ast.BinaryExpr:
-		return evalBinaryExpr(expr)
+		return e.evalBinaryExpr(expr)
 	case *ast.IndexExpr:
-		return evalIndexExpr(expr)
+		return e.evalIndexExpr(expr)
 	case *ast.SliceExpr:
-		return evalSliceExpr(expr)
+		return e.evalSliceExpr(expr)
 	}
 	return reflect.Value{}, fmt.Errorf("unsupported ast.Expr: %T", expr)
 }
 
-func evalBasicLit(expr *ast.BasicLit) (reflect.Value, error) {
+func (e *Expr) evalBasicLit(expr *ast.BasicLit) (reflect.Value, error) {
 	switch expr.Kind {
 	case token.INT:
 		i, err := strconv.ParseInt(expr.Value, 10, 64)
@@ -94,12 +118,12 @@ func evalBasicLit(expr *ast.BasicLit) (reflect.Value, error) {
 	return reflect.Value{}, fmt.Errorf("unsupported *ast.BasicLit: %T", expr.Kind)
 }
 
-func evalBinaryExpr(expr *ast.BinaryExpr) (reflect.Value, error) {
-	lhs, err := eval(expr.X)
+func (e *Expr) evalBinaryExpr(expr *ast.BinaryExpr) (reflect.Value, error) {
+	lhs, err := e.eval(expr.X)
 	if err != nil {
 		return reflect.Value{}, err
 	}
-	rhs, err := eval(expr.Y)
+	rhs, err := e.eval(expr.Y)
 	if err != nil {
 		return reflect.Value{}, err
 	}
@@ -290,17 +314,17 @@ func evalBinaryExpr(expr *ast.BinaryExpr) (reflect.Value, error) {
 	return reflect.Value{}, fmt.Errorf("operator %s not defined for %v", expr.Op, lhs.Type())
 }
 
-func evalCallExpr(expr *ast.CallExpr) (reflect.Value, error) {
-	fn, err := eval(expr.Fun)
+func (e *Expr) evalCallExpr(expr *ast.CallExpr) (reflect.Value, error) {
+	fn, err := e.eval(expr.Fun)
 	if err != nil {
-		return fn, err
+		return reflect.Value{}, err
 	}
 	if fn.Kind() != reflect.Func {
 		rv := reflect.New(fn.Type()).Elem()
 		if len(expr.Args) == 0 {
 			return rv, nil
 		}
-		v, err := eval(expr.Args[0])
+		v, err := e.eval(expr.Args[0])
 		if err != nil {
 			return v, err
 		}
@@ -312,7 +336,7 @@ func evalCallExpr(expr *ast.CallExpr) (reflect.Value, error) {
 	if fn.Type().IsVariadic() && len(expr.Args) >= fn.Type().NumIn() {
 		vt := fn.Type().In(max(fn.Type().NumIn()-1, 0)).Elem()
 		for _, arg := range expr.Args {
-			v, err := eval(arg)
+			v, err := e.eval(arg)
 			if err != nil {
 				return v, err
 			}
@@ -336,7 +360,7 @@ func evalCallExpr(expr *ast.CallExpr) (reflect.Value, error) {
 		return reflect.Value{}, fmt.Errorf("func %s() takes %d args, received %d", name, fn.Type().NumIn(), len(expr.Args))
 	}
 	for i, arg := range expr.Args {
-		v, err := eval(arg)
+		v, err := e.eval(arg)
 		if err != nil {
 			return v, err
 		}
@@ -349,8 +373,8 @@ func evalCallExpr(expr *ast.CallExpr) (reflect.Value, error) {
 	return results[0], nil
 }
 
-func evalCompositeLit(expr *ast.CompositeLit) (reflect.Value, error) {
-	t, err := eval(expr.Type)
+func (e *Expr) evalCompositeLit(expr *ast.CompositeLit) (reflect.Value, error) {
+	t, err := e.eval(expr.Type)
 	if err != nil {
 		return reflect.Value{}, err
 	}
@@ -360,16 +384,17 @@ func evalCompositeLit(expr *ast.CompositeLit) (reflect.Value, error) {
 		for _, elem := range expr.Elts {
 			switch elem := elem.(type) {
 			case *ast.KeyValueExpr:
-				key, err := eval(elem.Key)
-				if err != nil {
-					return reflect.Value{}, err
+				switch key := elem.Key.(type) {
+				case *ast.Ident:
+					field := rv.FieldByName(key.Name)
+					value, err := e.eval(elem.Value)
+					if err != nil {
+						return reflect.Value{}, err
+					}
+					field.Set(value.Convert(field.Type()))
+				default:
+					panic(fmt.Errorf("%T", key))
 				}
-				field := rv.FieldByName(key.String())
-				value, err := eval(elem.Value)
-				if err != nil {
-					return reflect.Value{}, err
-				}
-				field.Set(value.Convert(field.Type()))
 			}
 		}
 		return rv, nil
@@ -378,12 +403,8 @@ func evalCompositeLit(expr *ast.CompositeLit) (reflect.Value, error) {
 	}
 }
 
-func evalSelectorExpr(expr *ast.SelectorExpr) (reflect.Value, error) {
-	x, err := eval(expr.X)
-	if err != nil {
-		return reflect.Value{}, err
-	}
-	sel, err := eval(expr.Sel)
+func (e *Expr) evalSelectorExpr(expr *ast.SelectorExpr) (reflect.Value, error) {
+	x, err := e.eval(expr.X)
 	if err != nil {
 		return reflect.Value{}, err
 	}
@@ -391,39 +412,39 @@ func evalSelectorExpr(expr *ast.SelectorExpr) (reflect.Value, error) {
 	switch x.Kind() {
 	case reflect.String:
 		if pkg, ok := packages()[x.String()]; ok {
-			if fn, ok := pkg[sel.String()]; ok {
+			if fn, ok := pkg[expr.Sel.Name]; ok {
 				return fn, nil
 			}
-			if fn, ok := pkg[upper(sel.String())]; ok {
+			if fn, ok := pkg[upper(expr.Sel.Name)]; ok {
 				return fn, nil
 			}
-			return reflect.Value{}, fmt.Errorf("cannot find object in package: %s.%s", x, sel)
+			return reflect.Value{}, fmt.Errorf("cannot find object in package: %s.%s", x, expr.Sel.Name)
 		}
 		return reflect.Value{}, fmt.Errorf("cannot find package: %s", x)
 	case reflect.Struct:
-		method := x.MethodByName(sel.String())
+		method := x.MethodByName(expr.Sel.Name)
 		if method.IsValid() {
 			return method, nil
 		}
-		method = x.MethodByName(upper(sel.String()))
+		method = x.MethodByName(upper(expr.Sel.Name))
 		if method.IsValid() {
 			return method, nil
 		}
-		field := x.FieldByName(sel.String())
+		field := x.FieldByName(expr.Sel.Name)
 		if field.IsValid() {
 			return field, nil
 		}
-		field = x.FieldByName(upper(sel.String()))
+		field = x.FieldByName(upper(expr.Sel.Name))
 		if field.IsValid() {
 			return field, nil
 		}
-		return reflect.Value{}, fmt.Errorf("no field or method %q on %v", sel.String(), x.Type())
+		return reflect.Value{}, fmt.Errorf("no field or method %q on %v", expr.Sel.Name, x.Type())
 	}
 	return reflect.Value{}, fmt.Errorf("unsupported *ast.SelectorExpr: (%v)(%v)", x.Type(), x)
 }
 
-func evalUnaryExpr(expr *ast.UnaryExpr) (reflect.Value, error) {
-	v, err := eval(expr.X)
+func (e *Expr) evalUnaryExpr(expr *ast.UnaryExpr) (reflect.Value, error) {
+	v, err := e.eval(expr.X)
 	if err != nil {
 		return reflect.Value{}, err
 	}
@@ -437,6 +458,13 @@ func evalUnaryExpr(expr *ast.UnaryExpr) (reflect.Value, error) {
 	case token.AND:
 		return reflect.ValueOf(^v.Int()), nil
 	case token.NOT:
+		// if v.Kind() == reflect.Interface {
+		// 	b, ok := v.Interface().(bool)
+		// 	if !ok {
+		// 		return reflect.Value{}, fmt.Errorf("received invalid type %T for unary operator %T", v.Interface(), expr.Op)
+		// 	}
+		// 	v = reflect.ValueOf(b)
+		// }
 		return reflect.ValueOf(!v.Bool()), nil
 	case token.XOR:
 		return reflect.ValueOf(^v.Int()), nil
@@ -444,10 +472,10 @@ func evalUnaryExpr(expr *ast.UnaryExpr) (reflect.Value, error) {
 	return reflect.Value{}, fmt.Errorf("unsupported *ast.UnaryExpr: %T", expr.Op)
 }
 
-func evalIndexExpr(expr *ast.IndexExpr) (reflect.Value, error) {
+func (e *Expr) evalIndexExpr(expr *ast.IndexExpr) (reflect.Value, error) {
 	return reflect.Value{}, fmt.Errorf("*ast.IndexExpr unsupported")
 }
 
-func evalSliceExpr(expr *ast.SliceExpr) (reflect.Value, error) {
+func (e *Expr) evalSliceExpr(expr *ast.SliceExpr) (reflect.Value, error) {
 	return reflect.Value{}, fmt.Errorf("*ast.SliceExpr unsupported")
 }
