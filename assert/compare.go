@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
-	"strings"
 	"time"
 
 	"go.chrisrx.dev/x/assert/internal/diff"
@@ -75,15 +74,7 @@ func newMatcherFunc(s string) (func(string) bool, error) {
 			return s == ""
 		}, nil
 	}
-	var sb strings.Builder
-	if s[0] != '^' {
-		sb.WriteString("^")
-	}
-	sb.WriteString(s)
-	if s[len(s)-1] != '$' {
-		sb.WriteString("$")
-	}
-	re, err := regexp.Compile(sb.String())
+	re, err := regexp.Compile(s)
 	if err != nil {
 		return nil, err
 	}
