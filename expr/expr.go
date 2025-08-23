@@ -473,6 +473,23 @@ func (e *Expr) evalUnaryExpr(expr *ast.UnaryExpr) (reflect.Value, error) {
 }
 
 func (e *Expr) evalIndexExpr(expr *ast.IndexExpr) (reflect.Value, error) {
+	v, err := e.eval(expr.X)
+	if err != nil {
+		return reflect.Value{}, err
+	}
+	index, err := e.eval(expr.Index)
+	if err != nil {
+		return reflect.Value{}, err
+	}
+
+	switch index.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		elem := v.Index(int(index.Int()))
+		if elem.IsValid() {
+			return elem, nil
+		}
+	}
+
 	return reflect.Value{}, fmt.Errorf("*ast.IndexExpr unsupported")
 }
 

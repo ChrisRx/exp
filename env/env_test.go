@@ -7,6 +7,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/url"
 	"testing"
 	"time"
@@ -177,10 +178,12 @@ func TestParse(t *testing.T) {
 			String  string    `env:"DEFAULT_STRING" $default:"now().format('2006-01-02')"`
 			String2 string    `env:"DEFAULT_STRING" $default:"now()" layout:"2006-01-02"`
 			Number  int       `env:"DEFAULT_NUMBER" $default:"5 + 6"`
+			IP      net.IP    `env:"IP_ADDRESS" $default:"net.ParseIP('127.0.0.1')"`
 		}]()
 		assert.WithinDuration(t, time.Now(), opts.Time, 10*time.Millisecond)
 		assert.Equal(t, opts.String, opts.String2)
 		assert.Equal(t, 11, opts.Number)
+		assert.Equal(t, opts.IP, net.ParseIP("127.0.0.1"))
 	})
 
 	t.Run("slices", func(t *testing.T) {
@@ -339,6 +342,7 @@ func TestParse(t *testing.T) {
 			"URL":          "https://www.google.com",
 			"CUSTOM_TYPE":  "hi",
 			"RSA_PUBKEY":   string(pem.EncodeToMemory(&pem.Block{Bytes: pub})),
+			"IP_ADDRESS":   "127.0.0.1",
 		}, func() {
 			opts := env.MustParseFor[struct {
 				Duration      time.Duration  `env:"DURATION"`
@@ -348,6 +352,7 @@ func TestParse(t *testing.T) {
 				CustomType    CustomType     `env:"CUSTOM_TYPE"`
 				CustomTypePtr *CustomType    `env:"CUSTOM_TYPE"`
 				PubKey        *rsa.PublicKey `env:"RSA_PUBKEY"`
+				IP            net.IP         `env:"IP_ADDRESS" validate:"some(parse_ip('127.0.0.1'))"`
 			}]()
 
 			assert.Equal(t, 10*time.Second, opts.Duration)
@@ -358,6 +363,7 @@ func TestParse(t *testing.T) {
 			assert.Equal(t, CustomType{S: "hi"}, opts.CustomType)
 			assert.Equal(t, &CustomType{S: "hi"}, opts.CustomTypePtr)
 			assert.Equal(t, &priv.PublicKey, opts.PubKey)
+			assert.Equal(t, opts.IP, net.ParseIP("127.0.0.1"))
 		})
 	})
 
@@ -370,5 +376,32 @@ func TestParse(t *testing.T) {
 		assert.Equal(t, "95", opts.Result0)
 		assert.Equal(t, "95", opts.Result1)
 		assert.Equal(t, "1", opts.Result2)
+	})
+
+	t.Run("validate", func(t *testing.T) {
+		assert.WithEnviron(t, map[string]string{
+			"UUID": "7b2b2c53-0d22-44af-8ac5-e080434352b2",
+		}, func() {
+			assert.NoError(t, must.Get1(env.ParseFor[struct {
+				ID string `env:"UUID" validate:"len(ID) == 36"`
+			}]()), "validate length successful")
+
+			assert.Error(t, "field ID failed validation", must.Get1(env.ParseFor[struct {
+				ID string `env:"UUID" validate:"len(ID) == 37"`
+			}]()), "validate length failed")
+
+			assert.NoError(t, must.Get1(env.ParseFor[struct {
+				ID      string `env:"UUID" validate:"some(ID)"`
+				OtherID string `env:"UUID" validate:"!none(OtherID)"`
+			}]()), "value not zero")
+
+			assert.Error(t, "undefined: WrongField", must.Get1(env.ParseFor[struct {
+				OtherID string `env:"UUID" validate:"none(WrongField)"`
+			}]()), "wrong field symbol")
+
+			assert.NoError(t, must.Get1(env.ParseFor[struct {
+				Num int `env:"NUM" $default:"min(200,150)" validate:"Num < 200 && Num > 100"`
+			}]()), "cannot validate number range")
+		})
 	})
 }

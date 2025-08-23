@@ -3,7 +3,11 @@ package expr
 import (
 	"fmt"
 	"math"
+	"net"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -33,12 +37,8 @@ var builtins = map[string]reflect.Value{
 			return 0
 		}
 	}),
-	"some": reflect.ValueOf(func(v any) bool {
-		return !ptr.IsZero(v)
-	}),
-	"none": reflect.ValueOf(func(v any) bool {
-		return ptr.IsZero(v)
-	}),
+	"some": reflect.ValueOf(func(v any) bool { return !ptr.IsZero(v) }),
+	"none": reflect.ValueOf(func(v any) bool { return ptr.IsZero(v) }),
 
 	// basic type casts
 	"int": reflect.ValueOf(func(v any) int {
@@ -50,6 +50,8 @@ var builtins = map[string]reflect.Value{
 			return int(rv.Uint())
 		case reflect.Float32, reflect.Float64:
 			return int(rv.Float())
+		case reflect.String:
+			return int(must.Get0(strconv.ParseInt(rv.String(), 10, 64)))
 		default:
 			return 0
 		}
@@ -67,9 +69,7 @@ var builtins = map[string]reflect.Value{
 			return float64(0)
 		}
 	}),
-	"string": reflect.ValueOf(func(v any) string {
-		return fmt.Sprint(v)
-	}),
+	"string": reflect.ValueOf(func(v any) string { return fmt.Sprint(v) }),
 
 	// math
 	"min": reflect.ValueOf(math.Min),
@@ -81,26 +81,20 @@ var builtins = map[string]reflect.Value{
 	"trim":       reflect.ValueOf(strings.Trim),
 	"upper":      reflect.ValueOf(strings.ToUpper),
 	"lower":      reflect.ValueOf(strings.ToLower),
+	"split":      reflect.ValueOf(strings.Split),
 
 	// fmt
-	"print": reflect.ValueOf(func(args ...any) {
-		fmt.Print(args...)
-	}),
-	"printf": reflect.ValueOf(func(format string, args ...any) {
-		fmt.Printf(format, args...)
-	}),
-	"println": reflect.ValueOf(func(args ...any) {
-		fmt.Println(args...)
-	}),
-	"sprint": reflect.ValueOf(func(args ...any) string {
-		return fmt.Sprint(args...)
-	}),
-	"sprintf": reflect.ValueOf(func(format string, args ...any) string {
-		return fmt.Sprintf(format, args...)
-	}),
-	"sprintln": reflect.ValueOf(func(args ...any) string {
-		return fmt.Sprintln(args...)
-	}),
+	"print":    reflect.ValueOf(fmt.Print),
+	"printf":   reflect.ValueOf(fmt.Printf),
+	"println":  reflect.ValueOf(fmt.Println),
+	"sprint":   reflect.ValueOf(fmt.Sprint),
+	"sprintf":  reflect.ValueOf(fmt.Sprintf),
+	"sprintln": reflect.ValueOf(fmt.Sprintln),
+
+	// os
+	"getwd":    reflect.ValueOf(func() string { return must.Get0(os.Getwd()) }),
+	"tempdir":  reflect.ValueOf(os.TempDir),
+	"joinpath": reflect.ValueOf(filepath.Join),
 
 	// time
 	"now": reflect.ValueOf(func() time.Time {
@@ -124,6 +118,10 @@ var builtins = map[string]reflect.Value{
 	"duration": reflect.ValueOf(func(s string) time.Duration {
 		return must.Get0(time.ParseDuration(s))
 	}),
+
+	// net
+	"parse_mac": reflect.ValueOf(net.ParseMAC),
+	"parse_ip":  reflect.ValueOf(net.ParseIP),
 }
 
 func take[T any](elems []any, index int) T {

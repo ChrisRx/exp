@@ -3,14 +3,14 @@
 [![Go Reference](https://pkg.go.dev/badge/go.chrisrx.dev/x.svg)](https://pkg.go.dev/go.chrisrx.dev/x/env)
 [![Build Status](https://github.com/ChrisRx/exp/actions/workflows/go.yml/badge.svg?branch=main)](https://github.com/ChrisRx/exp/actions)
 
-A library for declaring composable, reusable Go structs that loads values parsed from environment variables.
+A library for declaring composable, reusable Go structs for loading values parsed from environment variables.
 
 ## 🚀 Features
 
 * Supports many [commonly used types](#supported-types)
 * Register [user-defined types](#registering-custom-parsers)
 * Nested structs [auto-prefix](#auto-prefix) environment variable keys
-* Use [Go-like expressions](../expr/README.md) to [generate default values](#default-expressions)
+* Use [Go-like expressions](../expr/README.md) to [generate default values](#default-expressions) or [validate values](#field-validation)
 
 > [!IMPORTANT]
 > Features like auto-prefix are important to making structs composable, which is why it is on by default.
@@ -19,16 +19,25 @@ A library for declaring composable, reusable Go structs that loads values parsed
 
 ```go
 var opts = env.MustParseFor[struct {
-    Timeout time.Duration `env:"TIMEOUT" default:"10m"`
-    Start   time.Time     `env:"START" $default:"now()"`
-}]()
-
+	Addr           string        `env:"ADDR" default:":8080" validate:"int(split(Addr, ':')[1]) > 1024"`
+	Dir            http.Dir      `env:"DIR" $default:"tempdir()"`
+	ReadTimeout    time.Duration `env:"TIMEOUT" default:"2m"`
+	WriteTimeout   time.Duration `env:"WRITE_TIMEOUT" default:"30s"`
+	MaxHeaderBytes int           `env:"MAX_HEADER_BYTES" $default:"1 << 20"`
+}](env.Namespace("FILESERVER"))
 
 func main() {
-    ctx, cancel := context.WithTimeout(context.Background(), opts.Timeout)
-    defer cancel()
-
-    fmt.Printf("started at %v\n", opts.Start)
+	s := &http.Server{
+		Addr:           opts.Addr,
+		Handler:        http.FileServer(opts.Dir),
+		ReadTimeout:    opts.ReadTimeout,
+		WriteTimeout:   opts.WriteTimeout,
+		MaxHeaderBytes: opts.MaxHeaderBytes,
+	}
+	log.Printf("serving %s at %s ...\n", opts.Dir, opts.Addr)
+	if err := s.ListenAndServe(); err != nil {
+		log.Fatal(err)
+	}
 }
 ```
 
@@ -69,6 +78,7 @@ The following struct tags are used to define how env reads from environment vari
 | `env`       | The name of the environment variable to load values from. If not present, the field is ignored. |
 | `default`   | Specifies a default value for a field. This is used when the environment variable is not set. |
 | `$default`  | Use an expression to set a default field value. This is used when the environment variable is not set. |
+| `validate`  | Use a boolean expression to validate the field value. |
 | `required`  | Set the field as required.  |
 | `sep`       | Separator used when parsing array/slice values. Defaults to `,`. |
 | `layout`    | Layout used to format/parse `time.Time` fields. Defaults to [time.RFC3339Nano](https://pkg.go.dev/time#RFC3339Nano). |
@@ -102,7 +112,7 @@ type Config struct {
 Setting `env:"USERS_DB"` here means that the environment variables are now loaded from `USERS_DB_HOST`/`USERS_DB_PORT`.
 
 > [!TIP]
-> You can prevent auto-prefix on a nested struct by declaring it an anonymous field, aka embedding.
+> You can prevent auto-prefix on a nested struct by declaring it as an anonymous field, aka embedding.
 
 ### Registering custom parsers
 
@@ -137,3 +147,15 @@ type Config struct {
 A couple interesting things are happening here. For one, the above is syntactic sugar for `time.Now().Add(-1 * time.Hour)`. It works by transforming the method lookups for Go types from snakecase to the expected Go method text case. For example, `now().is_zero()` will call `time.Now().IsZero()`, under-the-hood.
 
 The other interesting thing happening here is that strings are specified using single quotes. This was a workaround to deal with the strict requirements for parsing [struct tags](https://pkg.go.dev/reflect#StructTag) which requires using double quotes to enclose tag values.
+
+### Field validation
+
+The `validate` tag can be used to specify a boolean expression that checks the value of a field once parsing is finished. This can be used to verify things like minimum string length:
+
+```go
+type Config struct {
+    Name string `env:"NAME" validate:"len(Name) > 3"`
+}
+```
+
+The field value is injected into the expression scope allowing for it to be referenced by the field name.

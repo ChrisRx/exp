@@ -166,7 +166,29 @@ func (p *Parser) parse(rv reflect.Value, field Field) error {
 		if !p.RequireTagged && field.Env == "" {
 			return nil
 		}
-		return field.Set(rv)
+		if err := field.Set(rv); err != nil {
+			return err
+		}
+		if field.Validate != "" {
+			result, err := expr.Eval(field.Validate, expr.Env(map[string]reflect.Value{
+				field.Name: rv,
+			}))
+			if err != nil {
+				return err
+			}
+			result = underlying(result)
+			if result.Kind() != reflect.Bool {
+				return fmt.Errorf("expected bool, received %v", result.Type())
+			}
+			if !result.Bool() {
+				return fmt.Errorf(strings.Dedent(`
+					field %v failed validation:
+						condition: %v
+						value: %q
+				`), field.Name, field.Validate, rv.Interface())
+			}
+		}
+		return nil
 	}
 }
 
@@ -188,6 +210,16 @@ func isStruct(rv reflect.Value) bool {
 	return true
 }
 
+func underlying(rv reflect.Value) reflect.Value {
+	if rv.Kind() != reflect.Interface {
+		return rv
+	}
+	if !rv.CanInterface() {
+		panic(fmt.Errorf("underlying: cannot interface: %v", rv.Type()))
+	}
+	return reflect.ValueOf(rv.Interface())
+}
+
 type Field struct {
 	Name      string
 	Anonymous bool
@@ -197,6 +229,7 @@ type Field struct {
 	Namespace   string
 	Default     string
 	DefaultExpr string
+	Validate    string
 	Separator   string
 	Required    bool
 	Layout      string
@@ -213,6 +246,7 @@ func NewField(rv reflect.Value, index int, prefixes ...string) Field {
 		Namespace:   st.Tag.Get("namespace"),
 		Default:     st.Tag.Get("default"),
 		DefaultExpr: st.Tag.Get("$default"),
+		Validate:    st.Tag.Get("validate"),
 		Separator:   cmp.Or(st.Tag.Get("sep"), ","),
 		Required:    must.Get0(strconv.ParseBool(st.Tag.Get("required"))),
 		Layout:      cmp.Or(st.Tag.Get("layout"), time.RFC3339Nano),
