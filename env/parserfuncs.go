@@ -75,15 +75,6 @@ func Register[T any](fn CustomParserFunc) {
 		if s == "" {
 			return nil, nil
 		}
-		if isExpr(s) {
-			rv, err := eval(s)
-			if err != nil {
-				return nil, err
-			}
-			if t, ok := typeAssert[time.Time](rv); ok {
-				return t, nil
-			}
-		}
 		return fn(field, s)
 	}
 }

@@ -50,8 +50,8 @@ func (p *printer) print(rv reflect.Value, field Field) {
 			return
 		}
 		p.ptrs.add(rv)
-		defer p.ptrs.remove(rv)
 		p.print(reflect.Indirect(rv), field)
+		p.ptrs.remove(rv)
 	case reflect.Struct:
 		prefixes := field.prefixes
 		switch {

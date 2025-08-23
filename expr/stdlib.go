@@ -10,6 +10,7 @@ import (
 	"time"
 )
 
+// TODO(ChrisRx): maybe rethink this
 var packages = sync.OnceValue(func() map[string]map[string]reflect.Value {
 	return map[string]map[string]reflect.Value{
 		"fmt": {

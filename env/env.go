@@ -288,9 +288,7 @@ func (f Field) set(rv reflect.Value, s string) error {
 	switch rv.Kind() {
 	case reflect.Array, reflect.Slice:
 		et := rv.Type().Elem()
-		switch indirectType(et).Kind() {
-		case reflect.Array, reflect.Slice:
-			// Slices of slices are not supported.
+		if isInvalidNestedType(et) {
 			return fmt.Errorf("received invalid slice element type: %v", et)
 		}
 		elems := strings.Split(s, f.Separator)
@@ -314,9 +312,15 @@ func (f Field) set(rv reflect.Value, s string) error {
 			if err := f.set(key, parts[0]); err != nil {
 				return err
 			}
+			if isInvalidNestedType(key.Type()) {
+				return fmt.Errorf("received invalid map key type: %v", key.Type())
+			}
 			value := reflect.New(rv.Type().Elem()).Elem()
 			if err := f.set(value, parts[1]); err != nil {
 				return err
+			}
+			if isInvalidNestedType(value.Type()) {
+				return fmt.Errorf("received invalid map value type: %v", value.Type())
 			}
 			mv.SetMapIndex(key, value)
 		}
@@ -365,17 +369,18 @@ func (f Field) set(rv reflect.Value, s string) error {
 	}
 }
 
+func isInvalidNestedType(rt reflect.Type) bool {
+	switch indirectType(rt).Kind() {
+	case reflect.Array, reflect.Slice, reflect.Map:
+		return true
+	default:
+		return false
+	}
+}
+
 func indirectType(rt reflect.Type) reflect.Type {
 	if rt.Kind() == reflect.Pointer {
 		rt = rt.Elem()
 	}
 	return rt
-}
-
-func isExpr(s string) bool {
-	return strings.HasPrefix(s, "$(") && strings.HasSuffix(s, ")")
-}
-
-func eval(s string) (reflect.Value, error) {
-	return expr.Eval(strings.TrimSuffix(strings.TrimPrefix(s, "$("), ")"))
 }
