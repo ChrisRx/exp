@@ -484,7 +484,11 @@ func (e *Expr) evalIndexExpr(expr *ast.IndexExpr) (reflect.Value, error) {
 
 	switch index.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		elem := v.Index(int(index.Int()))
+		index := int(index.Int())
+		if v.Len() <= index {
+			return reflect.New(v.Type()).Elem(), nil
+		}
+		elem := v.Index(index)
 		if elem.IsValid() {
 			return elem, nil
 		}

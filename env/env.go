@@ -137,7 +137,6 @@ func (p *Parser) Parse(v any) error {
 }
 
 func (p *Parser) parse(rv reflect.Value, field Field) error {
-
 	switch {
 	case rv.Kind() == reflect.Pointer:
 		if rv.IsNil() {
