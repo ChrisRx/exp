@@ -5,11 +5,7 @@ import (
 	"fmt"
 )
 
-type Context = context.Context
-
-func WithValue(parent context.Context, key, val any) context.Context {
-	return context.WithValue(parent, key, val)
-}
+//go:generate go tool aliaspkg
 
 type key[V any] struct{}
 
