@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"unsafe"
 
-	"go.chrisrx.dev/x/slices"
 	"go.chrisrx.dev/x/strings"
 )
 
@@ -35,11 +34,11 @@ func (p *printer) Print(v any) error {
 	if rv.Kind() != reflect.Struct {
 		return fmt.Errorf("must provide a struct pointer, received %T", v)
 	}
-	for i := range rv.NumField() {
-		field := NewField(rv, i)
-		fmt.Println(field.Name)
-		p.print(rv.Field(i), field)
+	if rv.Type().Name() != "" {
+		fmt.Printf("%v\n", rv.Type().Name())
+		p.indent++
 	}
+	p.print(rv, Field{})
 	return nil
 }
 
@@ -60,33 +59,31 @@ func (p *printer) print(rv reflect.Value, field Field) {
 		default:
 			prefixes = append(prefixes, cmp.Or(field.Env, field.Namespace))
 		}
-		var maxFieldNameLen int
-		if rv.NumField() > 0 {
-			maxFieldNameLen = slices.Max(slices.Map(slices.N(rv.NumField()), func(i int) int {
-				name := rv.Type().Field(i).Name
-				return len(name)
-			}))
-		}
 		for i := range rv.NumField() {
 			p.indent++
 			field := NewField(rv, i, prefixes...)
-			fmt.Print(strings.Repeat("  ", p.indent))
+			fmt.Print(strings.Repeat("  ", p.indent-1))
 			fmt.Print(field.Name)
-			fmt.Print(strings.Repeat(" ", max(maxFieldNameLen-len(field.Name)+1, 0)))
-			if field.Env != "" {
-				fmt.Print(field.Key())
-			}
 			fmt.Println()
+			if field.Env != "" {
+				fmt.Print(strings.Repeat("  ", p.indent))
+				fmt.Printf("env=%s\n", field.Key())
+			}
 			if field.Default != "" {
-				fmt.Print(strings.Repeat("  ", p.indent+1))
+				fmt.Print(strings.Repeat("  ", p.indent))
 				fmt.Printf("default=%s\n", field.Default)
 			}
 			if rv.Type().Field(i).Tag.Get("layout") != "" {
-				fmt.Print(strings.Repeat("  ", p.indent+1))
+				fmt.Print(strings.Repeat("  ", p.indent))
 				fmt.Printf("layout=%s\n", field.Layout)
 			}
 			p.print(rv.Field(i), field)
 			p.indent--
+		}
+	default:
+		if rv.IsValid() && !rv.IsZero() {
+			fmt.Print(strings.Repeat("  ", p.indent))
+			fmt.Printf("value=%v\n", rv)
 		}
 	}
 }

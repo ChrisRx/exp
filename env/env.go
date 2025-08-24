@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strconv"
 	"time"
+	"unicode"
 
 	"go.chrisrx.dev/x/expr"
 	"go.chrisrx.dev/x/must"
@@ -136,6 +137,7 @@ func (p *Parser) Parse(v any) error {
 }
 
 func (p *Parser) parse(rv reflect.Value, field Field) error {
+
 	switch {
 	case rv.Kind() == reflect.Pointer:
 		if rv.IsNil() {
@@ -166,6 +168,9 @@ func (p *Parser) parse(rv reflect.Value, field Field) error {
 		if !p.RequireTagged && field.Env == "" {
 			return nil
 		}
+		if !isValidEnv(field.Env) {
+			return fmt.Errorf("env tag must only contain letters, digits or _: %q", field.Env)
+		}
 		if err := field.Set(rv); err != nil {
 			return err
 		}
@@ -190,6 +195,12 @@ func (p *Parser) parse(rv reflect.Value, field Field) error {
 		}
 		return nil
 	}
+}
+
+func isValidEnv(s string) bool {
+	return !strings.ContainsFunc(s, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_'
+	})
 }
 
 // isStruct checks if the provided value is a struct that doesn't have a custom
