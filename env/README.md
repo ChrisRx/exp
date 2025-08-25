@@ -19,7 +19,7 @@ A library for declaring composable, reusable Go structs for loading values parse
 
 ```go
 var opts = env.MustParseFor[struct {
-	Addr           string        `env:"ADDR" default:":8080" validate:"int(split(Addr, ':')[1]) > 1024"`
+	Addr           string        `env:"ADDR" default:":8080" validate:"split_addr().port > 1024"`
 	Dir            http.Dir      `env:"DIR" $default:"tempdir()"`
 	ReadTimeout    time.Duration `env:"TIMEOUT" default:"2m"`
 	WriteTimeout   time.Duration `env:"WRITE_TIMEOUT" default:"30s"`

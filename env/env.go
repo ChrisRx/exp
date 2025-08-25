@@ -1,3 +1,5 @@
+// Package env provides functions for loading structs from environment
+// variables.
 package env
 
 import (
