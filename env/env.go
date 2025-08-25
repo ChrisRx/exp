@@ -176,6 +176,7 @@ func (p *Parser) parse(rv reflect.Value, field Field) error {
 		if field.Validate != "" {
 			result, err := expr.Eval(field.Validate, expr.Env(map[string]reflect.Value{
 				field.Name: rv,
+				"self":     rv,
 			}))
 			if err != nil {
 				return err

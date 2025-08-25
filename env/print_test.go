@@ -8,13 +8,10 @@ import (
 )
 
 func TestPrint(t *testing.T) {
-	err := env.Print(struct {
+	env.Print(struct {
 		Database pg.Config
 		Nested   struct {
 			Database pg.Config
 		}
 	}{})
-	if err != nil {
-		t.Fatal(err)
-	}
 }

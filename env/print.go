@@ -9,7 +9,7 @@ import (
 	"go.chrisrx.dev/x/strings"
 )
 
-func Print(v any, opts ...ParserOption) error {
+func Print(v any, opts ...ParserOption) {
 	parser := NewParser(opts...)
 	p := printer{
 		DisableAutoPrefix: parser.DisableAutoPrefix,
@@ -17,7 +17,9 @@ func Print(v any, opts ...ParserOption) error {
 		RequireTagged:     parser.RequireTagged,
 		ptrs:              make(ptrmap),
 	}
-	return p.Print(v)
+	if err := p.Print(v); err != nil {
+		panic(err)
+	}
 }
 
 type printer struct {
@@ -38,7 +40,11 @@ func (p *printer) Print(v any) error {
 		fmt.Printf("%v\n", rv.Type().Name())
 		p.indent++
 	}
-	p.print(rv, Field{})
+	field := Field{}
+	if p.Namespace != "" {
+		field.prefixes = append(field.prefixes, p.Namespace)
+	}
+	p.print(rv, field)
 	return nil
 }
 
@@ -64,7 +70,7 @@ func (p *printer) print(rv reflect.Value, field Field) {
 			field := NewField(rv, i, prefixes...)
 			fmt.Print(strings.Repeat("  ", p.indent-1))
 			fmt.Print(field.Name)
-			fmt.Println()
+			fmt.Println("{")
 			if field.Env != "" {
 				fmt.Print(strings.Repeat("  ", p.indent))
 				fmt.Printf("env=%s\n", field.Key())
@@ -78,6 +84,7 @@ func (p *printer) print(rv reflect.Value, field Field) {
 				fmt.Printf("layout=%s\n", field.Layout)
 			}
 			p.print(rv.Field(i), field)
+			fmt.Println("}")
 			p.indent--
 		}
 	default:
