@@ -128,42 +128,34 @@ func (e *Expr) evalBinaryExpr(expr *ast.BinaryExpr) (reflect.Value, error) {
 		return reflect.Value{}, err
 	}
 
+	type timeAdd interface {
+		Add(time.Duration) time.Time
+	}
+
+	fn := func(t timeAdd, d time.Duration) (reflect.Value, bool) {
+		switch expr.Op {
+		case token.ADD:
+			return reflect.ValueOf(t.Add(d)), true
+		case token.SUB:
+			return reflect.ValueOf(t.Add(-d)), true
+		default:
+			return reflect.Value{}, false
+		}
+	}
+
 	switch lhs := lhs.Interface().(type) {
 	case time.Duration:
 		switch rhs := rhs.Interface().(type) {
-		case time.Time:
-			switch expr.Op {
-			case token.ADD:
-				return reflect.ValueOf(rhs.Add(lhs)), nil
-			case token.SUB:
-				return reflect.ValueOf(rhs.Add(-lhs)), nil
-			}
-		case *time.Time:
-			switch expr.Op {
-			case token.ADD:
-				return reflect.ValueOf(rhs.Add(lhs)), nil
-			case token.SUB:
-				return reflect.ValueOf(rhs.Add(-lhs)), nil
+		case time.Time, *time.Time:
+			if rv, ok := fn(rhs.(timeAdd), lhs); ok {
+				return rv, nil
 			}
 		}
-	case time.Time:
+	case time.Time, *time.Time:
 		switch rhs := rhs.Interface().(type) {
 		case time.Duration:
-			switch expr.Op {
-			case token.ADD:
-				return reflect.ValueOf(lhs.Add(rhs)), nil
-			case token.SUB:
-				return reflect.ValueOf(lhs.Add(-rhs)), nil
-			}
-		}
-	case *time.Time:
-		switch rhs := rhs.Interface().(type) {
-		case time.Duration:
-			switch expr.Op {
-			case token.ADD:
-				return reflect.ValueOf(lhs.Add(rhs)), nil
-			case token.SUB:
-				return reflect.ValueOf(lhs.Add(-rhs)), nil
+			if rv, ok := fn(lhs.(timeAdd), rhs); ok {
+				return rv, nil
 			}
 		}
 	}
@@ -178,10 +170,12 @@ func (e *Expr) evalBinaryExpr(expr *ast.BinaryExpr) (reflect.Value, error) {
 	case lhs.CanFloat() || rhs.CanFloat():
 		floatType := reflect.TypeOf(float64(0))
 		lhs, rhs = lhs.Convert(floatType), rhs.Convert(floatType)
-	case lhs.CanInt() && lhs.CanUint():
+	case (lhs.CanInt() && rhs.CanUint()) || (lhs.CanUint() && rhs.CanInt()):
 		if lhs.Type().Bits() > rhs.Type().Bits() {
 			rhs = rhs.Convert(lhs.Type())
 		}
+		lhs = lhs.Convert(rhs.Type())
+	default:
 		lhs = lhs.Convert(rhs.Type())
 	}
 
@@ -352,7 +346,20 @@ func (e *Expr) evalCallExpr(expr *ast.CallExpr) (reflect.Value, error) {
 		results := fn.Call(args)
 		return results[0], nil
 	}
-	if len(expr.Args) != fn.Type().NumIn() && fn.Type().NumIn()-1 != len(expr.Args) {
+
+	switch {
+	case len(expr.Args) == 0 && fn.Type().NumIn() == 1:
+		if self, ok := e.env["self"]; ok {
+			arg0t := fn.Type().In(0)
+			if self.Type().AssignableTo(arg0t) {
+				if self.CanConvert(arg0t) {
+					results := fn.Call([]reflect.Value{self.Convert(arg0t)})
+					return results[0], nil
+				}
+			}
+		}
+	}
+	if len(expr.Args) != fn.Type().NumIn() {
 		name, ok := expr.Fun.(*ast.Ident)
 		if !ok {
 			name = &ast.Ident{Name: ""}

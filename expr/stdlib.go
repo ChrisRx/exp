@@ -1,6 +1,7 @@
 package expr
 
 import (
+	"encoding/base64"
 	"fmt"
 	"math"
 	"net"
@@ -55,6 +56,22 @@ var packages = sync.OnceValue(func() map[string]map[string]reflect.Value {
 		"strings": {
 			"HasPrefix": reflect.ValueOf(strings.HasPrefix),
 			"HasSuffix": reflect.ValueOf(strings.HasSuffix),
+		},
+		"base64": {
+			"decode": reflect.ValueOf(func(s string) string {
+				data, _ := base64.StdEncoding.DecodeString(s)
+				return string(data)
+			}),
+			"encode": reflect.ValueOf(func(input any) string {
+				switch input := input.(type) {
+				case []byte:
+					return base64.StdEncoding.EncodeToString(input)
+				case string:
+					return base64.StdEncoding.EncodeToString([]byte(input))
+				default:
+					return ""
+				}
+			}),
 		},
 	}
 })

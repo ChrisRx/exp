@@ -22,6 +22,7 @@ func TestEval(t *testing.T) {
 	cases := []struct {
 		name     string
 		input    string
+		env      map[string]reflect.Value
 		expected any
 	}{
 		{
@@ -92,12 +93,44 @@ func TestEval(t *testing.T) {
 			input:    `(time.Time{}).is_zero()`,
 			expected: true,
 		},
+		{
+			name:  "non-privileged port",
+			input: `split_addr(self).port > 1024`,
+			env: map[string]reflect.Value{
+				"self": reflect.ValueOf(":8080"),
+			},
+			expected: true,
+		},
+		{
+			name:  "implicit argument passing",
+			input: `split_addr().port > 1024`,
+			env: map[string]reflect.Value{
+				"self": reflect.ValueOf(":8080"),
+			},
+			expected: true,
+		},
+		{
+			input:    `hmac("some key", "data")`,
+			expected: "6461746170d19601c3b9123566d9f6cec756de0d8fb3e57d2474dd82c3005edee7106ad7",
+		},
+		{
+			input:    `md5("data")`,
+			expected: "8d777f385d3dfec8815d20f7496026dc",
+		},
+		{
+			input:    `base64.encode("data")`,
+			expected: "ZGF0YQ==",
+		},
+		{
+			input:    `base64.decode("ZGF0YQ==")`,
+			expected: "data",
+		},
 	}
 
 	builtins["Something"] = reflect.ValueOf(Something{})
 
 	for _, tc := range cases {
-		v, err := Eval(tc.input)
+		v, err := Eval(tc.input, Env(tc.env))
 		if err != nil {
 			t.Fatal(err)
 		}

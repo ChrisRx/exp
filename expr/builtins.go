@@ -1,8 +1,14 @@
 package expr
 
 import (
+	"crypto/hmac"
+	"crypto/md5"
+	"crypto/sha1"
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"net"
 	"os"
 	"path/filepath"
@@ -122,6 +128,62 @@ var builtins = map[string]reflect.Value{
 	// net
 	"parse_mac": reflect.ValueOf(net.ParseMAC),
 	"parse_ip":  reflect.ValueOf(net.ParseIP),
+	"split_addr": reflect.ValueOf(func(s string) struct {
+		Host string
+		Port int
+	} {
+		type addr struct {
+			Host string
+			Port int
+		}
+		host, port, _ := net.SplitHostPort(s)
+		i, _ := strconv.Atoi(port)
+		return addr{Host: host, Port: i}
+	}),
+
+	"to_json": reflect.ValueOf(func(v string) string {
+		return string(must.Get0(json.Marshal(v)))
+	}),
+	"atoi":    reflect.ValueOf(func(s string) int { return must.Get0(strconv.Atoi(s)) }),
+	"itoa":    reflect.ValueOf(strconv.Itoa),
+	"quote":   reflect.ValueOf(strconv.Quote),
+	"unquote": reflect.ValueOf(func(s string) string { return must.Get0(strconv.Unquote(s)) }),
+
+	"hmac": reflect.ValueOf(func(args ...any) string {
+		return fmt.Sprintf("%x", hmac.New(sha256.New, take[[]byte](args, 0)).Sum(take[[]byte](args, 1)))
+	}),
+	"md5": reflect.ValueOf(func(input any) string {
+		return fmt.Sprintf("%x", md5.Sum(convert[[]byte](input)))
+	}),
+	"sha1": reflect.ValueOf(func(input any) string {
+		return fmt.Sprintf("%x", sha1.Sum(convert[[]byte](input)))
+	}),
+	"sha256": reflect.ValueOf(func(input any) string {
+		return fmt.Sprintf("%x", sha256.Sum256(convert[[]byte](input)))
+	}),
+	"rand": reflect.ValueOf(func(args ...any) int {
+		switch len(args) {
+		case 1:
+			return rand.IntN(take[int](args, 0))
+		case 2:
+			min := take[int](args, 1)
+			max := take[int](args, 1)
+			return rand.IntN(max-min) + min
+		default:
+			return rand.Int()
+		}
+	}),
+	"random": reflect.ValueOf(rand.Float64),
+}
+
+func convert[T any](v any) T {
+	rv := reflect.ValueOf(v)
+	rt := reflect.TypeFor[T]()
+	if rv.CanConvert(rt) {
+		return rv.Convert(rt).Interface().(T)
+	}
+	var zero T
+	return zero
 }
 
 func take[T any](elems []any, index int) T {
