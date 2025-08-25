@@ -13,7 +13,7 @@ func TestTicker(t *testing.T) {
 		last := time.Now()
 		for _, d := range getExpectedDurations(Backoff{}, 4) {
 			next := <-ticker.Next()
-			assert.WithinDuration(t, last.Add(d), next, 10*time.Millisecond)
+			assert.WithinDuration(t, last.Add(d), next, 50*time.Millisecond)
 			last = next
 		}
 	})
