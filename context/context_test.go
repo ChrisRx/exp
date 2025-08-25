@@ -14,20 +14,23 @@ type Value struct {
 	s string
 }
 
-func TestFrom(t *testing.T) {
-	ctx := context.WithValue(t.Context(), ValueKey{}, Value{s: "some value"})
-	v := context.From[ValueKey, Value](ctx)
-	assert.Equal(t, "some value", v.s)
-}
-
 func TestKey(t *testing.T) {
 	ctx := t.Context()
 
-	k := context.Key[Value]()
-	fmt.Printf("%s\n", k)
-	assert.Equal(t, false, k.Has(ctx))
+	t.Run("struct", func(t *testing.T) {
+		k := context.Key[Value]()
+		fmt.Printf("%s\n", k)
+		assert.Equal(t, false, k.Has(ctx))
 
-	ctx = k.WithValue(ctx, Value{s: "hi"})
-	assert.Equal(t, true, k.Has(ctx))
-	assert.Equal(t, "hi", k.Value(ctx).s)
+		ctx = k.WithValue(ctx, Value{s: "hi"})
+		assert.Equal(t, true, k.Has(ctx))
+		assert.Equal(t, "hi", k.Value(ctx).s)
+	})
+
+	t.Run("slice", func(t *testing.T) {
+		k := context.Key[[]string]()
+		ctx = k.WithValue(ctx, []string{"a", "b"})
+		ctx = k.WithValue(ctx, append(k.Value(ctx), "c"))
+		assert.Equal(t, []string{"a", "b", "c"}, k.Value(ctx))
+	})
 }

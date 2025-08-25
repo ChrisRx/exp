@@ -3,26 +3,38 @@ package context
 import (
 	"context"
 	"fmt"
+
+	"go.chrisrx.dev/x/safe"
 )
 
 //go:generate go tool aliaspkg
 
-type key[V any] struct{}
-
-func Key[V any]() key[V] {
-	return key[V]{}
+type key[V any] struct {
+	_ safe.NoCopy
 }
 
-func (k key[V]) String() string {
-	return fmt.Sprintf("context.Key[%T]", k)
+// Key creates a new key used for loading and storing values in a
+// [context.Context]. The key itself is a pointer to the underlying key type,
+// therefore should not be used directly with functions like
+// [context.Context.Value]. Instead, the methods for key should be used to
+// load/store values.
+//
+// Key is intended to make package level context keys that can be shared by
+// other packages.
+func Key[V any]() *key[V] {
+	return &key[V]{}
 }
 
-func (k key[V]) Has(ctx context.Context) bool {
+// Has checks the provided [context.Context] if this key has a value set.
+func (k *key[V]) Has(ctx context.Context) bool {
 	_, ok := ctx.Value(k).(V)
 	return ok
 }
 
-func (k key[V]) Value(ctx context.Context) V {
+// Value returns the value stored in the provided [context.Context]. If no
+// value is set, the zero value for the parameterized type for this key is
+// returned.
+func (k *key[V]) Value(ctx context.Context) V {
 	if v, ok := ctx.Value(k).(V); ok {
 		return v
 	}
@@ -30,14 +42,12 @@ func (k key[V]) Value(ctx context.Context) V {
 	return zero
 }
 
-func (k key[V]) WithValue(parent context.Context, value V) context.Context {
+// WithValue returns a new [context.Context] derived from the provided
+// [context.Context] and value.
+func (k *key[V]) WithValue(parent context.Context, value V) context.Context {
 	return context.WithValue(parent, k, value)
 }
 
-func From[K comparable, V any](ctx context.Context) V {
-	if v, ok := ctx.Value(*new(K)).(V); ok {
-		return v
-	}
-	var zero V
-	return zero
+func (k *key[V]) String() string {
+	return fmt.Sprintf("context.Key[%T]", k)
 }
