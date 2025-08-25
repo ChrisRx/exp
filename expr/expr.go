@@ -351,11 +351,9 @@ func (e *Expr) evalCallExpr(expr *ast.CallExpr) (reflect.Value, error) {
 	case len(expr.Args) == 0 && fn.Type().NumIn() == 1:
 		if self, ok := e.env["self"]; ok {
 			arg0t := fn.Type().In(0)
-			if self.Type().AssignableTo(arg0t) {
-				if self.CanConvert(arg0t) {
-					results := fn.Call([]reflect.Value{self.Convert(arg0t)})
-					return results[0], nil
-				}
+			if self.CanConvert(arg0t) {
+				results := fn.Call([]reflect.Value{self.Convert(arg0t)})
+				return results[0], nil
 			}
 		}
 	}

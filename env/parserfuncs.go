@@ -39,6 +39,10 @@ func init() {
 		return []byte(s), nil
 	})
 
+	Register[net.HardwareAddr](func(field Field, s string) (any, error) {
+		return net.HardwareAddr(s), nil
+	})
+
 	Register[net.IP](func(field Field, s string) (any, error) {
 		return net.ParseIP(s), nil
 	})
