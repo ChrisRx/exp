@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -15,6 +16,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -80,6 +82,19 @@ var builtins = map[string]reflect.Value{
 	// math
 	"min": reflect.ValueOf(math.Min),
 	"max": reflect.ValueOf(math.Max),
+	"rand": reflect.ValueOf(func(args ...any) int {
+		switch len(args) {
+		case 1:
+			return rand.IntN(take[int](args, 0))
+		case 2:
+			min := take[int](args, 1)
+			max := take[int](args, 1)
+			return rand.IntN(max-min) + min
+		default:
+			return rand.Int()
+		}
+	}),
+	"random": reflect.ValueOf(rand.Float64),
 
 	// strings
 	"startswith": reflect.ValueOf(strings.HasPrefix),
@@ -88,6 +103,10 @@ var builtins = map[string]reflect.Value{
 	"upper":      reflect.ValueOf(strings.ToUpper),
 	"lower":      reflect.ValueOf(strings.ToLower),
 	"split":      reflect.ValueOf(strings.Split),
+	"atoi":       reflect.ValueOf(func(s string) int { return must.Get0(strconv.Atoi(s)) }),
+	"itoa":       reflect.ValueOf(strconv.Itoa),
+	"quote":      reflect.ValueOf(strconv.Quote),
+	"unquote":    reflect.ValueOf(func(s string) string { return must.Get0(strconv.Unquote(s)) }),
 
 	// fmt
 	"print":    reflect.ValueOf(fmt.Print),
@@ -141,14 +160,7 @@ var builtins = map[string]reflect.Value{
 		return addr{Host: host, Port: i}
 	}),
 
-	"to_json": reflect.ValueOf(func(v string) string {
-		return string(must.Get0(json.Marshal(v)))
-	}),
-	"atoi":    reflect.ValueOf(func(s string) int { return must.Get0(strconv.Atoi(s)) }),
-	"itoa":    reflect.ValueOf(strconv.Itoa),
-	"quote":   reflect.ValueOf(strconv.Quote),
-	"unquote": reflect.ValueOf(func(s string) string { return must.Get0(strconv.Unquote(s)) }),
-
+	// hash
 	"hmac": reflect.ValueOf(func(args ...any) string {
 		return fmt.Sprintf("%x", hmac.New(sha256.New, take[[]byte](args, 0)).Sum(take[[]byte](args, 1)))
 	}),
@@ -161,20 +173,73 @@ var builtins = map[string]reflect.Value{
 	"sha256": reflect.ValueOf(func(input any) string {
 		return fmt.Sprintf("%x", sha256.Sum256(convert[[]byte](input)))
 	}),
-	"rand": reflect.ValueOf(func(args ...any) int {
-		switch len(args) {
-		case 1:
-			return rand.IntN(take[int](args, 0))
-		case 2:
-			min := take[int](args, 1)
-			max := take[int](args, 1)
-			return rand.IntN(max-min) + min
-		default:
-			return rand.Int()
-		}
-	}),
-	"random": reflect.ValueOf(rand.Float64),
 }
+
+// TODO(ChrisRx): maybe rethink this
+var packages = sync.OnceValue(func() map[string]map[string]reflect.Value {
+	return map[string]map[string]reflect.Value{
+		"fmt": {
+			"Print":   reflect.ValueOf(fmt.Print),
+			"Printf":  reflect.ValueOf(fmt.Printf),
+			"Println": reflect.ValueOf(fmt.Println),
+			"Sprint":  reflect.ValueOf(fmt.Sprint),
+			"Sprintf": reflect.ValueOf(fmt.Sprintf),
+		},
+		"math": {
+			"Abs":   reflect.ValueOf(math.Abs),
+			"Acos":  reflect.ValueOf(math.Acos),
+			"Asin":  reflect.ValueOf(math.Asin),
+			"Atan":  reflect.ValueOf(math.Atan),
+			"Ceil":  reflect.ValueOf(math.Ceil),
+			"Cos":   reflect.ValueOf(math.Cos),
+			"Exp":   reflect.ValueOf(math.Exp),
+			"Log":   reflect.ValueOf(math.Log),
+			"Max":   reflect.ValueOf(math.Max),
+			"Min":   reflect.ValueOf(math.Min),
+			"Round": reflect.ValueOf(math.Round),
+			"Sin":   reflect.ValueOf(math.Sin),
+			"Tan":   reflect.ValueOf(math.Tan),
+		},
+		"time": {
+			"Time":        reflect.ValueOf(time.Time{}),
+			"Local":       reflect.ValueOf(time.Local),
+			"UTC":         reflect.ValueOf(time.UTC),
+			"Date":        reflect.ValueOf(time.Date),
+			"Now":         reflect.ValueOf(time.Now),
+			"Nanosecond":  reflect.ValueOf(time.Nanosecond),
+			"Millisecond": reflect.ValueOf(time.Millisecond),
+			"Second":      reflect.ValueOf(time.Second),
+			"Minute":      reflect.ValueOf(time.Minute),
+			"Hour":        reflect.ValueOf(time.Hour),
+			"Duration":    reflect.ValueOf(time.Duration(0)),
+		},
+		"net": {
+			"ParseIP":   reflect.ValueOf(net.ParseIP),
+			"ParseCIDR": reflect.ValueOf(net.ParseCIDR),
+		},
+		"json": {
+			"Encode": reflect.ValueOf(func(v any) string {
+				return string(must.Get0(json.Marshal(v)))
+			}),
+		},
+		"base64": {
+			"Decode": reflect.ValueOf(func(s string) string {
+				data, _ := base64.StdEncoding.DecodeString(s)
+				return string(data)
+			}),
+			"Encode": reflect.ValueOf(func(input any) string {
+				switch input := input.(type) {
+				case []byte:
+					return base64.StdEncoding.EncodeToString(input)
+				case string:
+					return base64.StdEncoding.EncodeToString([]byte(input))
+				default:
+					return ""
+				}
+			}),
+		},
+	}
+})
 
 func convert[T any](v any) T {
 	rv := reflect.ValueOf(v)
