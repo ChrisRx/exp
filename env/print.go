@@ -9,6 +9,8 @@ import (
 	"go.chrisrx.dev/x/strings"
 )
 
+// Print prints a representation of a struct to standard output. It using the
+// same rules as [Parser].
 func Print(v any, opts ...ParserOption) {
 	parser := NewParser(opts...)
 	p := printer{
@@ -67,7 +69,7 @@ func (p *printer) print(rv reflect.Value, field Field) {
 		}
 		for i := range rv.NumField() {
 			p.indent++
-			field := NewField(rv, i, prefixes...)
+			field := newField(rv.Type().Field(i), prefixes...)
 			fmt.Print(strings.Repeat("  ", p.indent-1))
 			fmt.Print(field.Name)
 			fmt.Println("{")
@@ -84,6 +86,7 @@ func (p *printer) print(rv reflect.Value, field Field) {
 				fmt.Printf("layout=%s\n", field.Layout)
 			}
 			p.print(rv.Field(i), field)
+			fmt.Print(strings.Repeat("  ", p.indent-1))
 			fmt.Println("}")
 			p.indent--
 		}

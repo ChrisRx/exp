@@ -5,7 +5,7 @@
 
 A library for declaring composable, reusable Go structs for loading values parsed from environment variables.
 
-## 🚀 Features
+## ✨ Features
 
 * Supports many [commonly used types](#supported-types)
 * Register [user-defined types](#registering-custom-parsers)

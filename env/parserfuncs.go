@@ -13,6 +13,7 @@ import (
 	"go.chrisrx.dev/x/ptr"
 )
 
+// CustomParserFunc is the function signature for a custom type parser.
 type CustomParserFunc func(Field, string) (any, error)
 
 var customParserFuncs = make(map[reflect.Type]CustomParserFunc)
@@ -65,6 +66,9 @@ func init() {
 	})
 }
 
+// Register registers a custom parser with the provided type parameter. The
+// type parameter must be a non-pointer type, however, registering a type will
+// match for parsing for both the pointer and non-pointer of the type.
 func Register[T any](fn CustomParserFunc) {
 	rt := reflect.TypeFor[T]()
 	if rt.Kind() == reflect.Pointer {

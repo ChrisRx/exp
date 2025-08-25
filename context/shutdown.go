@@ -63,6 +63,8 @@ func Shutdown(signals ...os.Signal) ShutdownContext {
 type ShutdownContext interface {
 	context.Context
 
+	// AddHandler adds a new handler function to be associated with this
+	// [ShutdownContext].
 	AddHandler(func())
 }
 

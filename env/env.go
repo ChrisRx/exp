@@ -84,30 +84,38 @@ func MustParseFor[T any](opts ...ParserOption) T {
 
 type ParserOption func(*Parser)
 
+// DisableAutoPrefix is an option for [Parser] that disables the auto-prefix
+// feature.
 func DisableAutoPrefix() ParserOption {
 	return func(p *Parser) {
 		p.DisableAutoPrefix = true
 	}
 }
 
+// Namespace is an option for [Parser] that sets a root prefix for environment
+// variable names.
 func Namespace(ns string) ParserOption {
 	return func(p *Parser) {
 		p.Namespace = ns
 	}
 }
 
+// RequireTagged is an option for [Parser] that makes all struct fields
+// required. This applies regardless of whether the `env` tag is set.
 func RequireTagged() ParserOption {
 	return func(p *Parser) {
 		p.RequireTagged = true
 	}
 }
 
+// Parser is an environment variable parser for structs.
 type Parser struct {
 	DisableAutoPrefix bool
 	Namespace         string
 	RequireTagged     bool
 }
 
+// NewParser constructs a new [Parser] using the provided options.
 func NewParser(opts ...ParserOption) *Parser {
 	p := &Parser{}
 	for _, opt := range opts {
@@ -116,6 +124,8 @@ func NewParser(opts ...ParserOption) *Parser {
 	return p
 }
 
+// Parse parses struct tags to loads values from environment variables into a
+// struct. It only accepts a pointer to a struct.
 func (p *Parser) Parse(v any) error {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Pointer {
@@ -129,7 +139,7 @@ func (p *Parser) Parse(v any) error {
 	// The parser namespace should be added to the initial fields if it is set to
 	// ensure the prefix is set for all child fields.
 	for i := range rv.NumField() {
-		if err := p.parse(rv.Field(i), NewField(rv, i, p.Namespace)); err != nil {
+		if err := p.parse(rv.Field(i), newField(rv.Type().Field(i), p.Namespace)); err != nil {
 			return err
 		}
 	}
@@ -158,7 +168,7 @@ func (p *Parser) parse(rv reflect.Value, field Field) error {
 			prefixes = append(prefixes, cmp.Or(field.Env, field.Namespace))
 		}
 		for i := range rv.NumField() {
-			if err := p.parse(rv.Field(i), NewField(rv, i, prefixes...)); err != nil {
+			if err := p.parse(rv.Field(i), newField(rv.Type().Field(i), prefixes...)); err != nil {
 				return err
 			}
 		}
@@ -170,7 +180,7 @@ func (p *Parser) parse(rv reflect.Value, field Field) error {
 		if !isValidEnv(field.Env) {
 			return fmt.Errorf("env tag must only contain letters, digits or _: %q", field.Env)
 		}
-		if err := field.Set(rv); err != nil {
+		if err := field.set(rv); err != nil {
 			return err
 		}
 		if field.Validate != "" {
@@ -231,6 +241,7 @@ func underlying(rv reflect.Value) reflect.Value {
 	return reflect.ValueOf(rv.Interface())
 }
 
+// Field represents a parsed struct field.
 type Field struct {
 	Name      string
 	Anonymous bool
@@ -248,8 +259,7 @@ type Field struct {
 	prefixes []string
 }
 
-func NewField(rv reflect.Value, index int, prefixes ...string) Field {
-	st := rv.Type().Field(index)
+func newField(st reflect.StructField, prefixes ...string) Field {
 	return Field{
 		Name:        st.Name,
 		Anonymous:   st.Anonymous,
@@ -265,11 +275,13 @@ func NewField(rv reflect.Value, index int, prefixes ...string) Field {
 	}
 }
 
+// Key returns the environment variable name in screaming snake case. It
+// includes any prefixes defined for this field.
 func (f Field) Key() string {
 	return strings.Join(append(f.prefixes, f.Env), "_")
 }
 
-func (f Field) Set(rv reflect.Value) error {
+func (f Field) set(rv reflect.Value) error {
 	s, ok := os.LookupEnv(f.Key())
 	if !ok {
 		if f.DefaultExpr != "" {
@@ -291,17 +303,17 @@ func (f Field) Set(rv reflect.Value) error {
 			return nil
 		}
 		if f.Default != "" {
-			return f.set(rv, f.Default)
+			return f.setValue(rv, f.Default)
 		}
 		if f.Required {
 			return fmt.Errorf("required field not set: %v", f.Key())
 		}
 		return nil
 	}
-	return f.set(rv, s)
+	return f.setValue(rv, s)
 }
 
-func (f Field) set(rv reflect.Value, s string) error {
+func (f Field) setValue(rv reflect.Value, s string) error {
 	if !rv.CanSet() {
 		panic(fmt.Errorf("cannot set value: %v", rv.Type()))
 	}
@@ -310,7 +322,7 @@ func (f Field) set(rv reflect.Value, s string) error {
 		if rv.IsNil() {
 			rv.Set(reflect.New(rv.Type().Elem()))
 		}
-		return f.set(reflect.Indirect(rv), s)
+		return f.setValue(reflect.Indirect(rv), s)
 	}
 
 	// When a type-specific parser function is available, this is preferred to
@@ -339,7 +351,7 @@ func (f Field) set(rv reflect.Value, s string) error {
 		elems := strings.Split(s, f.Separator)
 		sv := reflect.MakeSlice(reflect.SliceOf(et), len(elems), len(elems))
 		for i := range sv.Len() {
-			if err := f.set(sv.Index(i), elems[i]); err != nil {
+			if err := f.setValue(sv.Index(i), elems[i]); err != nil {
 				return err
 			}
 		}
@@ -354,14 +366,14 @@ func (f Field) set(rv reflect.Value, s string) error {
 				return fmt.Errorf("cannot parse value into key/value pairs: %q", elem)
 			}
 			key := reflect.New(rv.Type().Key()).Elem()
-			if err := f.set(key, parts[0]); err != nil {
+			if err := f.setValue(key, parts[0]); err != nil {
 				return err
 			}
 			if isInvalidNestedType(key.Type()) {
 				return fmt.Errorf("received invalid map key type: %v", key.Type())
 			}
 			value := reflect.New(rv.Type().Elem()).Elem()
-			if err := f.set(value, parts[1]); err != nil {
+			if err := f.setValue(value, parts[1]); err != nil {
 				return err
 			}
 			if isInvalidNestedType(value.Type()) {
