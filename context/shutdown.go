@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 )
 
@@ -55,6 +56,10 @@ func Shutdown(signals ...os.Signal) ShutdownContext {
 			}
 		}
 	}()
+	runtime.AddCleanup(s, func(ch chan os.Signal) {
+		cancel()
+		signal.Stop(ch)
+	}, s.ch)
 	return s
 }
 
