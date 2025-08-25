@@ -43,7 +43,7 @@ func init() {
 	})
 
 	Register[rsa.PublicKey](func(field Field, s string) (any, error) {
-		pub, err := LoadPublicKey([]byte(s))
+		pub, err := loadPublicKey([]byte(s))
 		if err != nil {
 			return nil, err
 		}
@@ -54,7 +54,7 @@ func init() {
 	})
 
 	Register[x509.Certificate](func(field Field, s string) (any, error) {
-		cert, err := LoadPublicKey([]byte(s))
+		cert, err := loadPublicKey([]byte(s))
 		if err != nil {
 			return nil, err
 		}
@@ -79,7 +79,8 @@ func Register[T any](fn CustomParserFunc) {
 	}
 }
 
-func LoadPublicKey(data []byte) (any, error) {
+// TODO(ChrisRx): move to another package
+func loadPublicKey(data []byte) (any, error) {
 	block, _ := pem.Decode(data)
 	if block != nil {
 		data = block.Bytes
