@@ -3,17 +3,24 @@
 [![Go Reference](https://pkg.go.dev/badge/go.chrisrx.dev/x.svg)](https://pkg.go.dev/go.chrisrx.dev/x/env)
 [![Build Status](https://github.com/ChrisRx/exp/actions/workflows/go.yml/badge.svg?branch=main)](https://github.com/ChrisRx/exp/actions)
 
-A library for declaring composable, reusable Go structs for loading values parsed from environment variables.
+A library for declaring composable, reusable Go structs that load values parsed from environment variables.
 
 ## ✨ Features
 
 * Supports many [commonly used types](#supported-types)
-* Register [user-defined types](#registering-custom-parsers)
+* Parsing configurable through [struct tags](#tags)
 * Nested structs [auto-prefix](#auto-prefix) environment variable keys
-* Use [Go-like expressions](../expr/README.md) to [generate default values](#default-expressions) or [validate values](#field-validation)
+* Register [user-defined types](#registering-custom-parsers)
+* Use Go-like [expressions](../expr/README.md) to generate [default values](#default-expressions) or [validate values](#field-validation)
+
+## 🚀  Install
+
+```shell
+go get go.chrisrx.dev/x/env
+```
 
 > [!IMPORTANT]
-> Features like auto-prefix are important to making structs composable, which is why it is on by default.
+> This package is in an experimental module, meaning the API might not (yet) be stable. When it graduates to its own module the path will change (e.g. `go.chrisrx.dev/env`) and will be aliased to the new module here, indefinitely.
 
 ## 📋 Usage
 
@@ -62,6 +69,7 @@ Built-in custom parsers:
 * `url.URL`
 * `rsa.PublicKey`
 * `x509.Certificate`
+* `net.HardwareAddr`
 * `net.IP`
 
 Any existing type that implements `encoding.TextUnmarshaler` will also work.
@@ -84,6 +92,9 @@ The following struct tags are used to define how env reads from environment vari
 | `layout`    | Layout used to format/parse `time.Time` fields. Defaults to [time.RFC3339Nano](https://pkg.go.dev/time#RFC3339Nano). |
 
 ### Auto-prefix
+
+> [!IMPORTANT]
+> Features like auto-prefix are important to making structs composable, which is why it is on by default.
 
 Nested structs will automatically prepend the field name to the environment variable name for nested fields:
 
@@ -159,3 +170,6 @@ type Config struct {
 ```
 
 The field value is injected into the expression scope allowing for it to be referenced by the field name.
+
+> [!TIP]
+> Along with the exact name, the pseudo-variable `self` can be used to refer to the field value

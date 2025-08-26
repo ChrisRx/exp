@@ -243,6 +243,11 @@ func underlying(rv reflect.Value) reflect.Value {
 	return reflect.ValueOf(rv.Interface())
 }
 
+type Options[T any] struct {
+}
+
+type Option any
+
 // Field represents a parsed struct field.
 type Field struct {
 	Name      string
