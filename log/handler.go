@@ -1,31 +1,23 @@
 package log
 
 import (
-	"context"
 	"log/slog"
+
+	"go.chrisrx.dev/x/context"
 )
 
-// TODO(chrism): need handler that will deduplicate messages in certain
-// situations.
-
-type attrContextKey struct{}
-
-type ContextHandler struct {
-	slog.Handler
-}
-
-func (h *ContextHandler) Handle(ctx context.Context, r slog.Record) error {
-	if attrs, ok := ctx.Value(attrContextKey{}).([]any); ok {
-		r.Add(attrs...)
-	}
-
-	return h.Handler.Handle(ctx, r)
-}
-
+// DiscardLogger is an implementation of [slog.Handler] that discards all
+// messages.
 type DiscardLogger struct {
 	slog.Handler
 }
 
 func (h *DiscardLogger) Enabled(ctx context.Context, lvl slog.Level) bool {
 	return false
+}
+
+// Discard stores a [slog.Logger] in the provided context that discards all log
+// messages.
+func Discard(ctx context.Context) context.Context {
+	return Key.WithValue(ctx, slog.New(&DiscardLogger{}))
 }

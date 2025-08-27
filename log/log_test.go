@@ -1,7 +1,9 @@
 package log_test
 
 import (
+	"bytes"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"go.chrisrx.dev/x/assert"
@@ -28,5 +30,36 @@ func TestLog(t *testing.T) {
 			Format:    log.JSONFormat,
 			AddSource: true,
 		}, opts)
+	})
+
+	t.Run("context", func(t *testing.T) {
+		ctx := t.Context()
+		l := log.New()
+		ctx = log.Context(ctx, l)
+		assert.Equal(t, l, log.Key.Value(ctx))
+	})
+
+	t.Run("discard", func(t *testing.T) {
+		ctx := t.Context()
+
+		var buf bytes.Buffer
+		ctx = log.Context(ctx, log.New(
+			log.WithSource(false),
+			log.WithOutput(&buf),
+			log.WithRemoveAttrs(slog.LevelKey, slog.TimeKey),
+		))
+
+		assert.Equal(t, "msg=testing", func() string {
+			defer buf.Reset()
+			log.From(ctx).Info("testing")
+			return strings.TrimSuffix(buf.String(), "\n")
+		}())
+
+		ctx = log.Discard(ctx)
+		assert.Equal(t, "", func() string {
+			defer buf.Reset()
+			log.Key.Value(ctx).Info("testing")
+			return strings.TrimSuffix(buf.String(), "\n")
+		}())
 	})
 }
