@@ -298,7 +298,7 @@ func TestParse(t *testing.T) {
 			"USERS_DB_MAX_POOL_CONNS":  "100",
 		}, func() {
 			opts := env.MustParseFor[struct {
-				Database pg.Config `namespace:"USERS_DB"`
+				Database pg.Config `env:"USERS_DB"`
 			}]()
 
 			assert.Equal(t, pg.Config{

@@ -18,14 +18,14 @@ var opts = env.MustParseFor[struct {
 	ReadTimeout    time.Duration `env:"TIMEOUT" default:"2m"`
 	WriteTimeout   time.Duration `env:"WRITE_TIMEOUT" default:"30s"`
 	MaxHeaderBytes int           `env:"MAX_HEADER_BYTES" $default:"1 << 20"`
-}](env.Namespace("FILESERVER"))
+}](env.RootPrefix("FILESERVER"))
 
 func ExampleMustParseFor() {
 	_ = os.Setenv("MYSERVICE_ADDR", ":8443")
 
 	opts := env.MustParseFor[struct {
 		Addr string `env:"ADDR" default:":8080" validate:"split_addr(self).port > 1024"`
-	}](env.Namespace("MYSERVICE"))
+	}](env.RootPrefix("MYSERVICE"))
 
 	fmt.Printf("MYSERVICE_ADDR: %q\n", opts.Addr)
 

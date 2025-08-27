@@ -15,7 +15,7 @@ func Print(v any, opts ...ParserOption) {
 	parser := NewParser(opts...)
 	p := printer{
 		DisableAutoPrefix: parser.DisableAutoPrefix,
-		Namespace:         parser.Namespace,
+		RootPrefix:        parser.RootPrefix,
 		RequireTagged:     parser.RequireTagged,
 		ptrs:              make(ptrmap),
 	}
@@ -26,7 +26,7 @@ func Print(v any, opts ...ParserOption) {
 
 type printer struct {
 	DisableAutoPrefix bool
-	Namespace         string
+	RootPrefix        string
 	RequireTagged     bool
 
 	ptrs   ptrmap
@@ -43,8 +43,8 @@ func (p *printer) Print(v any) error {
 		p.indent++
 	}
 	field := Field{}
-	if p.Namespace != "" {
-		field.prefixes = append(field.prefixes, p.Namespace)
+	if p.RootPrefix != "" {
+		field.prefixes = append(field.prefixes, p.RootPrefix)
 	}
 	p.print(rv, field)
 	return nil
@@ -63,9 +63,9 @@ func (p *printer) print(rv reflect.Value, field Field) {
 		prefixes := field.prefixes
 		switch {
 		case !p.DisableAutoPrefix && !field.Anonymous:
-			prefixes = append(prefixes, cmp.Or(field.Env, field.Namespace, strings.ToSnakeCase(field.Name)))
+			prefixes = append(prefixes, cmp.Or(field.Env, strings.ToSnakeCase(field.Name)))
 		default:
-			prefixes = append(prefixes, cmp.Or(field.Env, field.Namespace))
+			prefixes = append(prefixes, field.Env)
 		}
 		for i := range rv.NumField() {
 			p.indent++
