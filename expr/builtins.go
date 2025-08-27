@@ -32,6 +32,8 @@ func enableTesting() {
 
 var testingTime = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 
+// TODO(ChrisRx): generate the builtins/docs
+
 var builtins = map[string]reflect.Value{
 	"len": reflect.ValueOf(func(v any) int {
 		rv := reflect.ValueOf(v)
@@ -253,18 +255,7 @@ func convert[T any](v any) T {
 
 func take[T any](elems []any, index int) T {
 	var zero T
-	if len(elems)-1 < index {
-		return zero
-	}
-	rv := reflect.ValueOf(elems[index])
-	rt := reflect.TypeFor[T]()
-	if rv.CanConvert(rt) {
-		return rv.Convert(rt).Interface().(T)
-	}
-	if t, ok := elems[index].(T); ok {
-		return t
-	}
-	return zero
+	return takeOr(elems, index, zero)
 }
 
 func takeOr[T any](elems []any, index int, orElse T) T {
