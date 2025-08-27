@@ -31,7 +31,7 @@ var opts = env.MustParseFor[struct {
 	ReadTimeout    time.Duration `env:"TIMEOUT" default:"2m"`
 	WriteTimeout   time.Duration `env:"WRITE_TIMEOUT" default:"30s"`
 	MaxHeaderBytes int           `env:"MAX_HEADER_BYTES" $default:"1 << 20"`
-}](env.Namespace("FILESERVER"))
+}](env.RootPrefix("FILESERVER"))
 
 func main() {
 	s := &http.Server{

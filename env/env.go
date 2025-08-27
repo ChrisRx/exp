@@ -94,14 +94,6 @@ func DisableAutoPrefix() ParserOption {
 	}
 }
 
-// Namespace is an option for [Parser] that sets a root prefix for environment
-// variable names.
-func Namespace(ns string) ParserOption {
-	return func(p *Parser) {
-		p.Namespace = ns
-	}
-}
-
 // RequireTagged is an option for [Parser] that makes all struct fields
 // required. This applies regardless of whether the `env` tag is set.
 func RequireTagged() ParserOption {
@@ -110,10 +102,18 @@ func RequireTagged() ParserOption {
 	}
 }
 
+// RootPrefix is an option for [Parser] that sets a root prefix for environment
+// variable names.
+func RootPrefix(prefix string) ParserOption {
+	return func(p *Parser) {
+		p.RootPrefix = prefix
+	}
+}
+
 // Parser is an environment variable parser for structs.
 type Parser struct {
 	DisableAutoPrefix bool
-	Namespace         string
+	RootPrefix        string
 	RequireTagged     bool
 }
 
@@ -138,10 +138,10 @@ func (p *Parser) Parse(v any) error {
 		return fmt.Errorf("must provide a struct pointer, received %T", v)
 	}
 
-	// The parser namespace should be added to the initial fields if it is set to
+	// The parser root prefix should be added to the initial fields if it is set to
 	// ensure the prefix is set for all child fields.
 	for i := range rv.NumField() {
-		if err := p.parse(rv.Field(i), newField(rv.Type().Field(i), p.Namespace)); err != nil {
+		if err := p.parse(rv.Field(i), newField(rv.Type().Field(i), p.RootPrefix)); err != nil {
 			return err
 		}
 	}
@@ -159,15 +159,14 @@ func (p *Parser) parse(rv reflect.Value, field Field) error {
 		return p.parse(reflect.Indirect(rv), field)
 	case isStruct(rv):
 		// Any prefixes from the parent field should be added to child fields. An
-		// additional prefix will added if either env or namespace tags are
-		// set, or if auto prefix is not disabled and the parent field wasn't
-		// anonymous (aka embedded).
+		// additional prefix will added if the env tag is set, or if auto prefix is
+		// not disabled and the parent field wasn't anonymous (aka embedded).
 		prefixes := field.prefixes
 		switch {
 		case !p.DisableAutoPrefix && !field.Anonymous:
-			prefixes = append(prefixes, cmp.Or(field.Env, field.Namespace, strings.ToSnakeCase(field.Name)))
+			prefixes = append(prefixes, cmp.Or(field.Env, strings.ToSnakeCase(field.Name)))
 		default:
-			prefixes = append(prefixes, cmp.Or(field.Env, field.Namespace))
+			prefixes = append(prefixes, field.Env)
 		}
 		for i := range rv.NumField() {
 			if err := p.parse(rv.Field(i), newField(rv.Type().Field(i), prefixes...)); err != nil {
@@ -243,11 +242,6 @@ func underlying(rv reflect.Value) reflect.Value {
 	return reflect.ValueOf(rv.Interface())
 }
 
-type Options[T any] struct {
-}
-
-type Option any
-
 // Field represents a parsed struct field.
 type Field struct {
 	Name      string
@@ -255,7 +249,6 @@ type Field struct {
 
 	// tags
 	Env         string
-	Namespace   string
 	Default     string
 	DefaultExpr string
 	Validate    string
@@ -271,7 +264,6 @@ func newField(st reflect.StructField, prefixes ...string) Field {
 		Name:        st.Name,
 		Anonymous:   st.Anonymous,
 		Env:         st.Tag.Get("env"),
-		Namespace:   st.Tag.Get("namespace"),
 		Default:     st.Tag.Get("default"),
 		DefaultExpr: st.Tag.Get("$default"),
 		Validate:    st.Tag.Get("validate"),
