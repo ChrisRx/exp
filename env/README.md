@@ -28,7 +28,7 @@ go get go.chrisrx.dev/x/env
 var opts = env.MustParseFor[struct {
 	Addr           string        `env:"ADDR" default:":8080" validate:"split_addr().port > 1024"`
 	Dir            http.Dir      `env:"DIR" $default:"tempdir()"`
-	ReadTimeout    time.Duration `env:"TIMEOUT" default:"2m"`
+	ReadTimeout    time.Duration `env:"READ_TIMEOUT" default:"2m"`
 	WriteTimeout   time.Duration `env:"WRITE_TIMEOUT" default:"30s"`
 	MaxHeaderBytes int           `env:"MAX_HEADER_BYTES" $default:"1 << 20"`
 }](env.RootPrefix("FILESERVER"))
@@ -64,6 +64,8 @@ Go slices, maps and structs are also supported.
 > [!WARNING]
 > Slices and maps cannot nest slices, maps or structs.
 
+Any type that is convertible to a handled type can be used as well. For example, [http.Dir](https://pkg.go.dev/http#Dir) is a type contructed from a `string`.
+
 Built-in custom parsers:
 * `time.Time`, `time.Duration`
 * `url.URL`
@@ -71,6 +73,7 @@ Built-in custom parsers:
 * `x509.Certificate`
 * `net.HardwareAddr`
 * `net.IP`
+
 
 Any existing type that implements `encoding.TextUnmarshaler` will also work.
 

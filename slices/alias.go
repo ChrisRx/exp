@@ -14,7 +14,7 @@ import (
 // in the usual order.
 //
 // This is an alias of https://pkg.go.dev/slices#All.
-func All[Slice []E, E any](s Slice) iter.Seq2[int, E] {
+func All[Slice ~[]E, E any](s Slice) iter.Seq2[int, E] {
 	return slices.All[Slice, E](s)
 }
 
@@ -22,14 +22,14 @@ func All[Slice []E, E any](s Slice) iter.Seq2[int, E] {
 // traversing it backward with descending indices.
 //
 // This is an alias of https://pkg.go.dev/slices#Backward.
-func Backward[Slice []E, E any](s Slice) iter.Seq2[int, E] {
+func Backward[Slice ~[]E, E any](s Slice) iter.Seq2[int, E] {
 	return slices.Backward[Slice, E](s)
 }
 
 // Values returns an iterator that yields the slice elements in order.
 //
 // This is an alias of https://pkg.go.dev/slices#Values.
-func Values[Slice []E, E any](s Slice) iter.Seq[E] {
+func Values[Slice ~[]E, E any](s Slice) iter.Seq[E] {
 	return slices.Values[Slice, E](s)
 }
 
@@ -37,7 +37,7 @@ func Values[Slice []E, E any](s Slice) iter.Seq[E] {
 // returns the extended slice.
 //
 // This is an alias of https://pkg.go.dev/slices#AppendSeq.
-func AppendSeq[Slice []E, E any](s Slice, seq iter.Seq[E]) Slice {
+func AppendSeq[Slice ~[]E, E any](s Slice, seq iter.Seq[E]) Slice {
 	return slices.AppendSeq[Slice, E](s, seq)
 }
 
@@ -81,7 +81,7 @@ func SortedStableFunc[E any](seq iter.Seq[E], cmp func(E, E) int) []E {
 // Chunk panics if n is less than 1.
 //
 // This is an alias of https://pkg.go.dev/slices#Chunk.
-func Chunk[Slice []E, E any](s Slice, n int) iter.Seq[Slice] {
+func Chunk[Slice ~[]E, E any](s Slice, n int) iter.Seq[Slice] {
 	return slices.Chunk[Slice, E](s, n)
 }
 
@@ -93,7 +93,7 @@ func Chunk[Slice []E, E any](s Slice, n int) iter.Seq[Slice] {
 // Floating point NaNs are not considered equal.
 //
 // This is an alias of https://pkg.go.dev/slices#Equal.
-func Equal[S []E, E comparable](s1, s2 S) bool {
+func Equal[S ~[]E, E comparable](s1, s2 S) bool {
 	return slices.Equal[S, E](s1, s2)
 }
 
@@ -104,7 +104,7 @@ func Equal[S []E, E comparable](s1, s2 S) bool {
 // for which eq returns false.
 //
 // This is an alias of https://pkg.go.dev/slices#EqualFunc.
-func EqualFunc[S1 []E1, S2 []E2, E1, E2 any](s1 S1, s2 S2, eq func(E1, E2) bool) bool {
+func EqualFunc[S1 ~[]E1, S2 ~[]E2, E1, E2 any](s1 S1, s2 S2, eq func(E1, E2) bool) bool {
 	return slices.EqualFunc[S1, S2, E1, E2](s1, s2, eq)
 }
 
@@ -117,7 +117,7 @@ func EqualFunc[S1 []E1, S2 []E2, E1, E2 any](s1 S1, s2 S2, eq func(E1, E2) bool)
 // The result is 0 if s1 == s2, -1 if s1 < s2, and +1 if s1 > s2.
 //
 // This is an alias of https://pkg.go.dev/slices#Compare.
-func Compare[S []E, E cmp.Ordered](s1, s2 S) int {
+func Compare[S ~[]E, E cmp.Ordered](s1, s2 S) int {
 	return slices.Compare[S, E](s1, s2)
 }
 
@@ -128,7 +128,7 @@ func Compare[S []E, E cmp.Ordered](s1, s2 S) int {
 // and +1 if len(s1) > len(s2).
 //
 // This is an alias of https://pkg.go.dev/slices#CompareFunc.
-func CompareFunc[S1 []E1, S2 []E2, E1, E2 any](s1 S1, s2 S2, cmp func(E1, E2) int) int {
+func CompareFunc[S1 ~[]E1, S2 ~[]E2, E1, E2 any](s1 S1, s2 S2, cmp func(E1, E2) int) int {
 	return slices.CompareFunc[S1, S2, E1, E2](s1, s2, cmp)
 }
 
@@ -136,7 +136,7 @@ func CompareFunc[S1 []E1, S2 []E2, E1, E2 any](s1 S1, s2 S2, cmp func(E1, E2) in
 // or -1 if not present.
 //
 // This is an alias of https://pkg.go.dev/slices#Index.
-func Index[S []E, E comparable](s S, v E) int {
+func Index[S ~[]E, E comparable](s S, v E) int {
 	return slices.Index[S, E](s, v)
 }
 
@@ -144,14 +144,14 @@ func Index[S []E, E comparable](s S, v E) int {
 // or -1 if none do.
 //
 // This is an alias of https://pkg.go.dev/slices#IndexFunc.
-func IndexFunc[S []E, E any](s S, f func(E) bool) int {
+func IndexFunc[S ~[]E, E any](s S, f func(E) bool) int {
 	return slices.IndexFunc[S, E](s, f)
 }
 
 // Contains reports whether v is present in s.
 //
 // This is an alias of https://pkg.go.dev/slices#Contains.
-func Contains[S []E, E comparable](s S, v E) bool {
+func Contains[S ~[]E, E comparable](s S, v E) bool {
 	return slices.Contains[S, E](s, v)
 }
 
@@ -159,7 +159,7 @@ func Contains[S []E, E comparable](s S, v E) bool {
 // element e of s satisfies f(e).
 //
 // This is an alias of https://pkg.go.dev/slices#ContainsFunc.
-func ContainsFunc[S []E, E any](s S, f func(E) bool) bool {
+func ContainsFunc[S ~[]E, E any](s S, f func(E) bool) bool {
 	return slices.ContainsFunc[S, E](s, f)
 }
 
@@ -172,7 +172,7 @@ func ContainsFunc[S []E, E any](s S, f func(E) bool) bool {
 // This function is O(len(s) + len(v)).
 //
 // This is an alias of https://pkg.go.dev/slices#Insert.
-func Insert[S []E, E any](s S, i int, v ...E) S {
+func Insert[S ~[]E, E any](s S, i int, v ...E) S {
 	return slices.Insert[S, E](s, i, v...)
 }
 
@@ -183,7 +183,7 @@ func Insert[S []E, E any](s S, i int, v ...E) S {
 // Delete zeroes the elements s[len(s)-(j-i):len(s)].
 //
 // This is an alias of https://pkg.go.dev/slices#Delete.
-func Delete[S []E, E any](s S, i, j int) S {
+func Delete[S ~[]E, E any](s S, i, j int) S {
 	return slices.Delete[S, E](s, i, j)
 }
 
@@ -192,7 +192,7 @@ func Delete[S []E, E any](s S, i, j int) S {
 // DeleteFunc zeroes the elements between the new length and the original length.
 //
 // This is an alias of https://pkg.go.dev/slices#DeleteFunc.
-func DeleteFunc[S []E, E any](s S, del func(E) bool) S {
+func DeleteFunc[S ~[]E, E any](s S, del func(E) bool) S {
 	return slices.DeleteFunc[S, E](s, del)
 }
 
@@ -202,7 +202,7 @@ func DeleteFunc[S []E, E any](s S, del func(E) bool) S {
 // When len(v) < (j-i), Replace zeroes the elements between the new length and the original length.
 //
 // This is an alias of https://pkg.go.dev/slices#Replace.
-func Replace[S []E, E any](s S, i, j int, v ...E) S {
+func Replace[S ~[]E, E any](s S, i, j int, v ...E) S {
 	return slices.Replace[S, E](s, i, j, v...)
 }
 
@@ -211,7 +211,7 @@ func Replace[S []E, E any](s S, i, j int, v ...E) S {
 // The result may have additional unused capacity.
 //
 // This is an alias of https://pkg.go.dev/slices#Clone.
-func Clone[S []E, E any](s S) S {
+func Clone[S ~[]E, E any](s S) S {
 	return slices.Clone[S, E](s)
 }
 
@@ -222,7 +222,7 @@ func Clone[S []E, E any](s S) S {
 // Compact zeroes the elements between the new length and the original length.
 //
 // This is an alias of https://pkg.go.dev/slices#Compact.
-func Compact[S []E, E comparable](s S) S {
+func Compact[S ~[]E, E comparable](s S) S {
 	return slices.Compact[S, E](s)
 }
 
@@ -231,7 +231,7 @@ func Compact[S []E, E comparable](s S) S {
 // CompactFunc zeroes the elements between the new length and the original length.
 //
 // This is an alias of https://pkg.go.dev/slices#CompactFunc.
-func CompactFunc[S []E, E any](s S, eq func(E, E) bool) S {
+func CompactFunc[S ~[]E, E any](s S, eq func(E, E) bool) S {
 	return slices.CompactFunc[S, E](s, eq)
 }
 
@@ -241,21 +241,21 @@ func CompactFunc[S []E, E any](s S, eq func(E, E) bool) S {
 // allocate the memory, Grow panics.
 //
 // This is an alias of https://pkg.go.dev/slices#Grow.
-func Grow[S []E, E any](s S, n int) S {
+func Grow[S ~[]E, E any](s S, n int) S {
 	return slices.Grow[S, E](s, n)
 }
 
 // Clip removes unused capacity from the slice, returning s[:len(s):len(s)].
 //
 // This is an alias of https://pkg.go.dev/slices#Clip.
-func Clip[S []E, E any](s S) S {
+func Clip[S ~[]E, E any](s S) S {
 	return slices.Clip[S, E](s)
 }
 
 // Concat returns a new slice concatenating the passed in slices.
 //
 // This is an alias of https://pkg.go.dev/slices#Concat.
-func Concat[S []E, E any](slices_ ...S) S {
+func Concat[S ~[]E, E any](slices_ ...S) S {
 	return slices.Concat[S, E](slices_...)
 }
 
@@ -266,7 +266,7 @@ func Concat[S []E, E any](slices_ ...S) S {
 // overflows.
 //
 // This is an alias of https://pkg.go.dev/slices#Repeat.
-func Repeat[S []E, E any](x S, count int) S {
+func Repeat[S ~[]E, E any](x S, count int) S {
 	return slices.Repeat[S, E](x, count)
 }
 
@@ -281,7 +281,7 @@ func Repeat[S []E, E any](x S, count int) S {
 // The function should return 0 for incomparable items.
 //
 // This is an alias of https://pkg.go.dev/slices#SortFunc.
-func SortFunc[S []E, E any](x S, cmp func(a, b E) int) {
+func SortFunc[S ~[]E, E any](x S, cmp func(a, b E) int) {
 	slices.SortFunc[S, E](x, cmp)
 }
 
@@ -289,14 +289,14 @@ func SortFunc[S []E, E any](x S, cmp func(a, b E) int) {
 // elements, using cmp to compare elements in the same way as [SortFunc].
 //
 // This is an alias of https://pkg.go.dev/slices#SortStableFunc.
-func SortStableFunc[S []E, E any](x S, cmp func(a, b E) int) {
+func SortStableFunc[S ~[]E, E any](x S, cmp func(a, b E) int) {
 	slices.SortStableFunc[S, E](x, cmp)
 }
 
 // IsSorted reports whether x is sorted in ascending order.
 //
 // This is an alias of https://pkg.go.dev/slices#IsSorted.
-func IsSorted[S []E, E cmp.Ordered](x S) bool {
+func IsSorted[S ~[]E, E cmp.Ordered](x S) bool {
 	return slices.IsSorted[S, E](x)
 }
 
@@ -304,7 +304,7 @@ func IsSorted[S []E, E cmp.Ordered](x S) bool {
 // comparison function as defined by [SortFunc].
 //
 // This is an alias of https://pkg.go.dev/slices#IsSortedFunc.
-func IsSortedFunc[S []E, E any](x S, cmp func(a, b E) int) bool {
+func IsSortedFunc[S ~[]E, E any](x S, cmp func(a, b E) int) bool {
 	return slices.IsSortedFunc[S, E](x, cmp)
 }
 
@@ -313,7 +313,7 @@ func IsSortedFunc[S []E, E any](x S, cmp func(a, b E) int) bool {
 // forces the output to be NaN).
 //
 // This is an alias of https://pkg.go.dev/slices#Min.
-func Min[S []E, E cmp.Ordered](x S) E {
+func Min[S ~[]E, E cmp.Ordered](x S) E {
 	return slices.Min[S, E](x)
 }
 
@@ -322,7 +322,7 @@ func Min[S []E, E cmp.Ordered](x S) E {
 // according to the cmp function, MinFunc returns the first one.
 //
 // This is an alias of https://pkg.go.dev/slices#MinFunc.
-func MinFunc[S []E, E any](x S, cmp func(a, b E) int) E {
+func MinFunc[S ~[]E, E any](x S, cmp func(a, b E) int) E {
 	return slices.MinFunc[S, E](x, cmp)
 }
 
@@ -331,7 +331,7 @@ func MinFunc[S []E, E any](x S, cmp func(a, b E) int) E {
 // forces the output to be NaN).
 //
 // This is an alias of https://pkg.go.dev/slices#Max.
-func Max[S []E, E cmp.Ordered](x S) E {
+func Max[S ~[]E, E cmp.Ordered](x S) E {
 	return slices.Max[S, E](x)
 }
 
@@ -340,7 +340,7 @@ func Max[S []E, E cmp.Ordered](x S) E {
 // according to the cmp function, MaxFunc returns the first one.
 //
 // This is an alias of https://pkg.go.dev/slices#MaxFunc.
-func MaxFunc[S []E, E any](x S, cmp func(a, b E) int) E {
+func MaxFunc[S ~[]E, E any](x S, cmp func(a, b E) int) E {
 	return slices.MaxFunc[S, E](x, cmp)
 }
 
@@ -350,7 +350,7 @@ func MaxFunc[S []E, E any](x S, cmp func(a, b E) int) E {
 // really found in the slice. The slice must be sorted in increasing order.
 //
 // This is an alias of https://pkg.go.dev/slices#BinarySearch.
-func BinarySearch[S []E, E cmp.Ordered](x S, target E) (int, bool) {
+func BinarySearch[S ~[]E, E cmp.Ordered](x S, target E) (int, bool) {
 	return slices.BinarySearch[S, E](x, target)
 }
 
@@ -363,6 +363,6 @@ func BinarySearch[S []E, E cmp.Ordered](x S, target E) (int, bool) {
 // cmp(a, t) < 0 and cmp(b, t) >= 0, then a must precede b in the slice.
 //
 // This is an alias of https://pkg.go.dev/slices#BinarySearchFunc.
-func BinarySearchFunc[S []E, E, T any](x S, target T, cmp func(E, T) int) (int, bool) {
+func BinarySearchFunc[S ~[]E, E, T any](x S, target T, cmp func(E, T) int) (int, bool) {
 	return slices.BinarySearchFunc[S, E, T](x, target, cmp)
 }

@@ -17,7 +17,7 @@ import (
 // to be the same from one call to the next.
 //
 // This is an alias of https://pkg.go.dev/maps#All.
-func All[Map map[K]V, K comparable, V any](m Map) iter.Seq2[K, V] {
+func All[Map ~map[K]V, K comparable, V any](m Map) iter.Seq2[K, V] {
 	return maps.All[Map, K, V](m)
 }
 
@@ -26,7 +26,7 @@ func All[Map map[K]V, K comparable, V any](m Map) iter.Seq2[K, V] {
 // to be the same from one call to the next.
 //
 // This is an alias of https://pkg.go.dev/maps#Keys.
-func Keys[Map map[K]V, K comparable, V any](m Map) iter.Seq[K] {
+func Keys[Map ~map[K]V, K comparable, V any](m Map) iter.Seq[K] {
 	return maps.Keys[Map, K, V](m)
 }
 
@@ -35,7 +35,7 @@ func Keys[Map map[K]V, K comparable, V any](m Map) iter.Seq[K] {
 // to be the same from one call to the next.
 //
 // This is an alias of https://pkg.go.dev/maps#Values.
-func Values[Map map[K]V, K comparable, V any](m Map) iter.Seq[V] {
+func Values[Map ~map[K]V, K comparable, V any](m Map) iter.Seq[V] {
 	return maps.Values[Map, K, V](m)
 }
 
@@ -43,7 +43,7 @@ func Values[Map map[K]V, K comparable, V any](m Map) iter.Seq[V] {
 // If a key in seq already exists in m, its value will be overwritten.
 //
 // This is an alias of https://pkg.go.dev/maps#Insert.
-func Insert[Map map[K]V, K comparable, V any](m Map, seq iter.Seq2[K, V]) {
+func Insert[Map ~map[K]V, K comparable, V any](m Map, seq iter.Seq2[K, V]) {
 	maps.Insert[Map, K, V](m, seq)
 }
 
@@ -59,7 +59,7 @@ func Collect[K comparable, V any](seq iter.Seq2[K, V]) map[K]V {
 // Values are compared using ==.
 //
 // This is an alias of https://pkg.go.dev/maps#Equal.
-func Equal[M1, M2 map[K]V, K, V comparable](m1 M1, m2 M2) bool {
+func Equal[M1, M2 ~map[K]V, K, V comparable](m1 M1, m2 M2) bool {
 	return maps.Equal[M1, M2, K, V](m1, m2)
 }
 
@@ -67,7 +67,7 @@ func Equal[M1, M2 map[K]V, K, V comparable](m1 M1, m2 M2) bool {
 // Keys are still compared with ==.
 //
 // This is an alias of https://pkg.go.dev/maps#EqualFunc.
-func EqualFunc[M1 map[K]V1, M2 map[K]V2, K comparable, V1, V2 any](m1 M1, m2 M2, eq func(V1, V2) bool) bool {
+func EqualFunc[M1 ~map[K]V1, M2 ~map[K]V2, K comparable, V1, V2 any](m1 M1, m2 M2, eq func(V1, V2) bool) bool {
 	return maps.EqualFunc[M1, M2, K, V1, V2](m1, m2, eq)
 }
 
@@ -75,7 +75,7 @@ func EqualFunc[M1 map[K]V1, M2 map[K]V2, K comparable, V1, V2 any](m1 M1, m2 M2,
 // the new keys and values are set using ordinary assignment.
 //
 // This is an alias of https://pkg.go.dev/maps#Clone.
-func Clone[M map[K]V, K comparable, V any](m M) M {
+func Clone[M ~map[K]V, K comparable, V any](m M) M {
 	return maps.Clone[M, K, V](m)
 }
 
@@ -85,13 +85,13 @@ func Clone[M map[K]V, K comparable, V any](m M) M {
 // with the key in src.
 //
 // This is an alias of https://pkg.go.dev/maps#Copy.
-func Copy[M1 map[K]V, M2 map[K]V, K comparable, V any](dst M1, src M2) {
+func Copy[M1 ~map[K]V, M2 ~map[K]V, K comparable, V any](dst M1, src M2) {
 	maps.Copy[M1, M2, K, V](dst, src)
 }
 
 // DeleteFunc deletes any key/value pairs from m for which del returns true.
 //
 // This is an alias of https://pkg.go.dev/maps#DeleteFunc.
-func DeleteFunc[M map[K]V, K comparable, V any](m M, del func(K, V) bool) {
+func DeleteFunc[M ~map[K]V, K comparable, V any](m M, del func(K, V) bool) {
 	maps.DeleteFunc[M, K, V](m, del)
 }

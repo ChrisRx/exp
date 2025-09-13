@@ -219,6 +219,12 @@ func (set *Set[T]) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// TODO(ChrisRx) Rename to Equal?
+
+func Union[T any](a, b []T) *Set[T] {
+	return New(a...).Union(New(b...))
+}
+
 // Compare compares two sets for equality, returning true if they contain all
 // the same elements.
 func Compare[T any](s1, s2 *Set[T]) bool {

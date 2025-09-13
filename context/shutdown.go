@@ -6,12 +6,18 @@ import (
 	"os/signal"
 	"runtime"
 	"syscall"
+
+	"go.chrisrx.dev/x/safe"
 )
 
-var defaultShutdownSignals = []os.Signal{
-	os.Interrupt,
-	syscall.SIGINT,
-	syscall.SIGTERM,
+// ShutdownContext is a specialized context that allows adding handler
+// functions when the context is marked done.
+type ShutdownContext interface {
+	context.Context
+
+	// AddHandler adds a new handler function to be associated with this
+	// [ShutdownContext].
+	AddHandler(func())
 }
 
 // Shutdown returns a new [ShutdownContext] using [context.Background] as the
@@ -34,14 +40,15 @@ func Shutdown(signals ...os.Signal) ShutdownContext {
 		signals = defaultShutdownSignals
 	}
 	signal.Notify(s.ch, signals...)
+
 	go func() {
 		defer cancel()
+		defer safe.Close(s.ch)
 		defer signal.Stop(s.ch)
 
 		for {
 			select {
 			case <-ctx.Done():
-				cancel()
 				return
 			case <-s.ch:
 				if len(s.handlers) == 0 {
@@ -56,6 +63,7 @@ func Shutdown(signals ...os.Signal) ShutdownContext {
 			}
 		}
 	}()
+
 	runtime.AddCleanup(s, func(ch chan os.Signal) {
 		cancel()
 		signal.Stop(ch)
@@ -63,14 +71,10 @@ func Shutdown(signals ...os.Signal) ShutdownContext {
 	return s
 }
 
-// ShutdownContext is a specialized context that allows adding handler
-// functions when the context is marked done.
-type ShutdownContext interface {
-	context.Context
-
-	// AddHandler adds a new handler function to be associated with this
-	// [ShutdownContext].
-	AddHandler(func())
+var defaultShutdownSignals = []os.Signal{
+	os.Interrupt,
+	syscall.SIGINT,
+	syscall.SIGTERM,
 }
 
 type shutdownCtx struct {
