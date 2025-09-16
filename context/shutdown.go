@@ -50,16 +50,14 @@ func Shutdown(signals ...os.Signal) ShutdownContext {
 			select {
 			case <-ctx.Done():
 				return
-			case <-s.ch:
-				if len(s.handlers) == 0 {
+			case _, ok := <-s.ch:
+				if !ok || len(s.handlers) == 0 {
 					return
 				}
-				var fn func()
-				fn, s.handlers = s.handlers[0], s.handlers[1:]
-				go func() {
+				go func(fn func()) {
 					defer cancel()
 					fn()
-				}()
+				}(s.nextHandler())
 			}
 		}
 	}()
@@ -90,6 +88,11 @@ var _ context.Context = (*shutdownCtx)(nil)
 // is marked done.
 func (s *shutdownCtx) AddHandler(fn func()) {
 	s.handlers = append(s.handlers, fn)
+}
+
+func (s *shutdownCtx) nextHandler() (next func()) {
+	next, s.handlers = s.handlers[0], s.handlers[1:]
+	return
 }
 
 func (s *shutdownCtx) String() string {
