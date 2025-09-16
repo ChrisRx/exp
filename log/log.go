@@ -1,4 +1,4 @@
-//go:generate go tool aliaspkg -include Fatal,Fatalf,Fatalln,Panic,Panicf,Panicln,Print,Printf,Println
+//go:generate go tool aliaspkg -docs=decls -include Fatal,Fatalf,Fatalln,Panic,Panicf,Panicln,Print,Printf,Println
 
 package log
 

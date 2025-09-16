@@ -126,8 +126,8 @@ func NewParser(opts ...ParserOption) *Parser {
 	return p
 }
 
-// Parse parses struct tags to loads values from environment variables into a
-// struct. It only accepts a pointer to a struct.
+// Parse loads values into a struct from environment variables. It only accepts
+// a pointer to a struct.
 func (p *Parser) Parse(v any) error {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Pointer {

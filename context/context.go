@@ -7,7 +7,7 @@ import (
 	"go.chrisrx.dev/x/safe"
 )
 
-//go:generate go tool aliaspkg
+//go:generate go tool aliaspkg -docs=all
 
 type key[V any] struct {
 	_ safe.NoCopy
