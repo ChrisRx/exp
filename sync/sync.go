@@ -4,3 +4,6 @@
 // library [sync] package. Some types are aliases of [sync] types to allow this
 // library to be used as a drop-in with extras.
 package sync
+
+// empty is syntactic sugar for a struct without fields.
+type empty struct{}

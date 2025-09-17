@@ -129,6 +129,9 @@ func (ch *Chan[T]) CloseAndRecv() <-chan T {
 //
 // If the stored channel is uninitialized or closed, it returns immediately.
 func (ch *Chan[T]) Send(messages ...T) {
+	if len(messages) == 0 {
+		return
+	}
 	if v := ch.load(); v != nil {
 		safe.Send(func() {
 			for _, msg := range messages {

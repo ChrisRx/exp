@@ -17,6 +17,17 @@ func (w *WaitGroup) Add(delta int) {
 	w.wg.Add(delta)
 }
 
+// TryAdd attempts to add delta to the [WaitGroup] counter. If a concurrency
+// limit is set and the underlying semaphore cannot be acquired immediately,
+// this returns without adding to the [WaitGroup].
+func (w *WaitGroup) TryAdd(delta int) bool {
+	if !w.limit.TryAcquire(delta) {
+		return false
+	}
+	w.wg.Add(delta)
+	return true
+}
+
 // Done decrements the [WaitGroup] counter by one.
 func (w *WaitGroup) Done() {
 	w.limit.Release()

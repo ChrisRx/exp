@@ -2,7 +2,7 @@ package sync
 
 // Semaphore is a weighted semaphore implementation built around [Chan].
 type Semaphore struct {
-	ch Chan[struct{}]
+	ch Chan[empty]
 }
 
 // NewSemaphore constructs a new semaphore using the provided size.
@@ -17,19 +17,30 @@ func (s *Semaphore) SetLimit(n int) {
 	s.ch.New(n)
 }
 
-// Acquire acquires a semaphore of weight n. If the size given was zero this
+// Acquire acquires a semaphore of weight n. If the size given was zero, this
 // operation is a nop.
+//
+// The weight provided cannot be greater than the semaphore capacity. If it is,
+// the semaphore capacity is used instead.
 func (s *Semaphore) Acquire(n int) {
-	if s.ch.Cap() == 0 {
-		return
+	s.ch.Send(make([]empty, min(s.ch.Cap(), n))...)
+}
+
+// TryAcquire attempts to acquire a semaphore of weight n. It returns
+// immediately if the semaphore cannot be acquired. If the size given was zero,
+// this operation is a nop.
+//
+// The weight provided cannot be greater than the semaphore capacity. If it is,
+// the semaphore capacity is used instead.
+func (s *Semaphore) TryAcquire(n int) bool {
+	for range min(s.ch.Cap(), n) {
+		select {
+		case s.ch.Load() <- empty{}:
+		default:
+			return false
+		}
 	}
-	// The requested weight is higher than the maximum capacity of this
-	// semaphore. This is a mistake and will always cause a deadlock, so the
-	// weight is set to the maximum capacity.
-	if s.ch.Cap() < n {
-		n = s.ch.Cap()
-	}
-	s.ch.Send(make([]struct{}, n)...)
+	return true
 }
 
 // Release releases a semaphore. If the size given was zero this operation is a

@@ -2,7 +2,7 @@ package sync
 
 // A Waiter uses a [LazyChan] to wait for an event to occur.
 type Waiter struct {
-	ch   LazyChan[struct{}]
+	ch   LazyChan[empty]
 	done Once
 }
 
@@ -25,6 +25,6 @@ func (w *Waiter) Wait() {
 	<-w.C()
 }
 
-func (w *Waiter) C() <-chan struct{} {
+func (w *Waiter) C() <-chan empty {
 	return w.ch.Load()
 }
