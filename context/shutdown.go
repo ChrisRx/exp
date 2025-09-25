@@ -2,6 +2,7 @@ package context
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"os/signal"
 	"runtime"
@@ -18,6 +19,10 @@ type ShutdownContext interface {
 	// AddHandler adds a new handler function to be associated with this
 	// [ShutdownContext].
 	AddHandler(func())
+
+	// Wait blocks until the context is done. This is syntactic sugar for
+	// receiving from [ShutdownContext.Done].
+	Wait()
 }
 
 // Shutdown returns a new [ShutdownContext] using [context.Background] as the
@@ -97,4 +102,17 @@ func (s *shutdownCtx) nextHandler() (next func()) {
 
 func (s *shutdownCtx) String() string {
 	return "context.ShutdownContext"
+}
+
+func (s *shutdownCtx) Wait() {
+	<-s.Done()
+}
+
+func AddHandler(ctx context.Context, fn func()) {
+	switch ctx := ctx.(type) {
+	case ShutdownContext:
+		ctx.AddHandler(fn)
+	default:
+		slog.Warn("provided context is not ShutdownContext")
+	}
 }
