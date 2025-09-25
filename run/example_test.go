@@ -20,4 +20,5 @@ func ExampleEvery() {
 	// doing some work
 	// doing some work
 	// doing some work
+	// doing some work
 }

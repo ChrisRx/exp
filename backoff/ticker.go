@@ -8,6 +8,8 @@ import (
 
 // A Ticker is like [time.Ticker] but accepts a [Backoff].
 type Ticker struct {
+	DisableInstantTick bool
+
 	c sync.Chan[time.Time]
 	b Backoff
 }
@@ -30,6 +32,10 @@ func (t *Ticker) Next() <-chan time.Time {
 	ch, isNew := t.c.LoadOrNew()
 	if isNew {
 		go func() {
+			// Send the first tick immediately, unless explicitly disabled.
+			if !t.DisableInstantTick {
+				t.c.Send(time.Now())
+			}
 			for {
 				select {
 				case <-t.c.Recv():

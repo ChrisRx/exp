@@ -18,7 +18,7 @@ func TestEvery(t *testing.T) {
 		var n int
 		run.Every(ctx, func() {
 			n++
-		}, 90*time.Millisecond)
+		}, 100*time.Millisecond)
 
 		assert.Equal(t, 5, n)
 	})
