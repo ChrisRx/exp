@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"bytes"
 	"cmp"
+	"fmt"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -88,4 +89,8 @@ func ToSnakeCase(s string) string {
 		b.WriteRune(v)
 	}
 	return b.String()
+}
+
+func ToString[T fmt.Stringer](s T) string {
+	return s.String()
 }

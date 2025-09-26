@@ -20,11 +20,11 @@ func Recover(errs ...error) {
 	if r := recover(); r != nil {
 		if len(errs) == 0 {
 			slog.Error("panic",
-				slog.String("loc", stack.GetLocation(func(s stack.Source) bool {
+				slog.String("loc", stack.Location(func(s stack.Frame) bool {
 					return cmp.Or(
-						strings.HasPrefix(s.FullName, "runtime"),
-						strings.HasPrefix(s.FullName, "go.chrisrx.dev/x/must"),
-						strings.HasPrefix(s.FullName, "go.chrisrx.dev/x/safe"),
+						strings.HasPrefix(s.Name(), "runtime"),
+						strings.HasPrefix(s.Name(), "go.chrisrx.dev/x/must"),
+						strings.HasPrefix(s.Name(), "go.chrisrx.dev/x/safe"),
 					)
 				})),
 				slog.Any("err", asError(r)),

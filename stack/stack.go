@@ -4,50 +4,83 @@ package stack
 
 import (
 	"fmt"
-	"path/filepath"
+	"go/build"
+	"reflect"
 	"runtime"
 	"strings"
 )
 
-type Source struct {
-	File     string
-	Line     int
-	FullName string
-}
-
-func (s Source) Name() string {
-	return s.FullName[strings.LastIndex(s.FullName, "/")+1:]
-}
-
-func (s Source) String() string {
-	name := s.Name()
-	if name == "" {
-		return fmt.Sprintf("%s:%d", s.File, s.Line)
-	}
-	return fmt.Sprintf("%s:%d %s", s.File, s.Line, name)
-}
-
-func GetSource(skip int) Source {
-	pc, file, line, _ := runtime.Caller(1 + skip)
-	s := Source{
-		File: filepath.Base(file),
-		Line: line,
-	}
-	if fn := runtime.FuncForPC(pc); fn != nil {
-		s.FullName = fn.Name()
-	}
-	return s
-}
-
 const maxStackDepth = 10
 
-func GetLocation(ignore func(Source) bool) string {
+type dummy struct{}
+
+var packageName = reflect.TypeOf(dummy{}).PkgPath()
+
+func Trace(skip int) (frames []Frame) {
 	for i := 1; i < maxStackDepth; i++ {
-		s := GetSource(i + 1)
-		if ignore(s) {
+		pc, file, line, ok := runtime.Caller(i + skip)
+		if !ok {
+			break
+		}
+		fn := runtime.FuncForPC(pc)
+		if fn == nil {
+			break
+		}
+		name := fn.Name()
+		file = strings.TrimPrefix(file, build.Default.GOROOT+"/src/")
+
+		// Filter out all frames from this package.
+		if strings.HasPrefix(name, packageName) {
 			continue
 		}
-		return s.String()
+		GOROOT := build.Default.GOROOT
+		if len(GOROOT) > 0 && strings.Contains(file, GOROOT) {
+			continue
+		}
+		frames = append(frames, Frame{
+			pc:   pc,
+			file: file,
+			line: line,
+			name: name,
+		})
+	}
+	return frames
+}
+
+type Frame struct {
+	pc   uintptr
+	file string
+	line int
+	name string
+}
+
+func (f Frame) String() string {
+	s := fmt.Sprintf("%s:%d", f.file, f.line)
+	if f.name == "" {
+		return s
+	}
+	return s + fmt.Sprintf(" -- %s()", shortFuncName(f.name))
+}
+
+func (f Frame) Name() string {
+	return f.name
+}
+
+func shortFuncName(name string) string {
+	name = name[strings.LastIndex(name, "/")+1:]
+	name = name[strings.Index(name, ".")+1:]
+	name = strings.Replace(name, "(", "", 1)
+	name = strings.Replace(name, "*", "", 1)
+	name = strings.Replace(name, ")", "", 1)
+	return name
+}
+
+func Location(ignore func(Frame) bool) string {
+	for _, frame := range Trace(1) {
+		if ignore(frame) {
+			continue
+		}
+		return frame.String()
 	}
 	return "<unknown>"
 }

@@ -30,27 +30,6 @@ func Println(v ...any) {
 	log.Println(v...)
 }
 
-// Fatal is equivalent to [Print] followed by a call to [os.Exit](1).
-//
-// This is an alias of https://pkg.go.dev/log#Fatal.
-func Fatal(v ...any) {
-	log.Fatal(v...)
-}
-
-// Fatalf is equivalent to [Printf] followed by a call to [os.Exit](1).
-//
-// This is an alias of https://pkg.go.dev/log#Fatalf.
-func Fatalf(format string, v ...any) {
-	log.Fatalf(format, v...)
-}
-
-// Fatalln is equivalent to [Println] followed by a call to [os.Exit](1).
-//
-// This is an alias of https://pkg.go.dev/log#Fatalln.
-func Fatalln(v ...any) {
-	log.Fatalln(v...)
-}
-
 // Panic is equivalent to [Print] followed by a call to panic().
 //
 // This is an alias of https://pkg.go.dev/log#Panic.
