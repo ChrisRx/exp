@@ -75,6 +75,20 @@ func (r *ResultGroup[T]) Get() iter.Seq2[T, error] {
 	}
 }
 
+// Collect collects values from the result group until all results are read or
+// the group context is done.
+func (r *ResultGroup[T]) Collect() ([]T, error) {
+	var results []T
+	for v, err := range r.Get() {
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, v)
+	}
+	return results, nil
+
+}
+
 // Wait blocks until all the goroutines in this group have returned. If any
 // errors occur, the first error encountered will be returned. It will also
 // block until at least one goroutine is scheduled.
