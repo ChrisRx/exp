@@ -38,21 +38,6 @@ func TestUntil(t *testing.T) {
 		assert.Equal(t, 5, n)
 	})
 
-	t.Run("until func()", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-
-		var n int
-		run.Until(ctx, func() {
-			n++
-			if n >= 5 {
-				cancel()
-			}
-		}, 10*time.Millisecond)
-
-		assert.Equal(t, 5, n)
-	})
-
 	t.Run("until func() bool", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
@@ -78,6 +63,23 @@ func TestUntil(t *testing.T) {
 			}
 			return fmt.Errorf("retry")
 		}, 10*time.Millisecond)
+
+		assert.Equal(t, 5, n)
+	})
+
+	t.Run("ping", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		var n int
+		run.Until(ctx, func() error {
+			n++
+			if n >= 5 {
+				return nil
+			}
+			fmt.Printf("not yet")
+			return fmt.Errorf("retry")
+		}, 1*time.Second)
 
 		assert.Equal(t, 5, n)
 	})

@@ -2,49 +2,94 @@ package run
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"time"
+
+	"go.chrisrx.dev/x/backoff"
+	"go.chrisrx.dev/x/must"
 )
 
-type Interval interface {
-	time.Duration | RetryOptions
-}
-
-type RetryFunc interface {
-	func() | func() bool | func() error
-}
-
-// hack to avoid errcheck
-type error_ = error
-
-// Every runs a function periodically for the provided interval.
+// Every runs a function periodically for the provided interval. It runs
+// indefinitely or until the context is done.
 //
 // The interval can be either a [time.Duration] or, if more complex retry logic
-// is required, a [RetryOptions]. Given a [time.Duration], this will run the
-// function forever at a constant interval.
-//
-// The context passed in can be used to return early, regardless of the
-// interval provided. If Every returns early, the last error (if any) will be
-// returned.
-func Every[R RetryFunc, T Interval](ctx context.Context, fn R, interval T) error_ {
-	return Retry(ctx, asRetryFunc(fn), retryOptionsFromInterval(interval)).WaitE()
+// is required, a [RetryOptions].
+func Every[T Interval](ctx context.Context, fn func(), interval T) {
+	ro := retryOptionsFromInterval(interval)
+	// ignore these user provided values so this runs indefinitely
+	ro.MaxAttempts = 0
+	ro.MaxElapsedTime = 0
+	_ = Do(ctx, func() (bool, error) {
+		fn()
+		return false, nil
+	}, ro)
 }
 
 // Until runs a function periodically for the provided interval. This is used
-// for running logic until something is successful. Until has different
-// behaviors depending on the retry function that is passed in. If the function
-// returns an error, it will run until no error is returned. If given a retry
-// function returning a bool, then it will run until true is returned.
+// for running logic until something is successful or until the context is
+// done.
+//
+// Until has different behaviors depending on the retry function that is passed
+// in. If the function returns an error, it will run until no error is
+// encountered. If given a retry function returning a bool, then it will run
+// until true is returned.
 //
 // The interval can be either a [time.Duration] or, if more complex retry logic
-// is required, a [RetryOptions]. Given a [time.Duration], this will run the
-// function forever at a constant interval.
+// is required, a [RetryOptions].
+func Until[R RetryFunc, T Interval](ctx context.Context, fn R, interval T) error {
+	return Do(ctx, asRetryFunc(fn), retryOptionsFromInterval(interval))
+}
+
+// Unless runs a function periodically for the provided interval. This is used
+// for running logic until something is unsuccessful. It is the inverse of
+// [Until].
 //
-// The context passed in can be used to return early, regardless of the
-// interval provided. If Until returns early, the last error (if any) will be
-// returned.
-func Until[R RetryFunc, T Interval](ctx context.Context, fn R, interval T) error_ {
-	return Retry(ctx, asRetryFunc(fn), retryOptionsFromInterval(interval)).WaitE()
+// Unless has different behaviors depending on the retry function that is passed
+// in. If the function returns an error, it will run until an error is
+// encountered. If given a retry function returning a bool, then it will run
+// until false is returned.
+//
+// The interval can be either a [time.Duration] or, if more complex retry logic
+// is required, a [RetryOptions].
+func Unless[R RetryFunc, T Interval](ctx context.Context, fn R, interval T) error {
+	return Do(ctx, func() (bool, error) {
+		ok, err := asRetryFunc(fn)()
+		return !ok, err
+	}, retryOptionsFromInterval(interval))
+}
+
+func Do(ctx context.Context, fn func() (bool, error), ro RetryOptions) error {
+	if ro.MaxElapsedTime != 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, ro.MaxElapsedTime)
+		defer cancel()
+	}
+	ticker := backoff.NewTicker(ro.Backoff())
+	defer ticker.Stop()
+
+	var attempts int
+	for {
+		select {
+		case <-ticker.Next():
+			attempts++
+			done, err := func() (_ bool, reterr error) {
+				defer must.Catch(&reterr)
+				return fn()
+			}()
+			if done {
+				return err
+			}
+			if ro.MaxAttempts != 0 && attempts >= ro.MaxAttempts {
+				return fmt.Errorf("max attempts")
+			}
+		case <-ctx.Done():
+			return nil
+		}
+	}
+}
+
+type Interval interface {
+	time.Duration | RetryOptions
 }
 
 func retryOptionsFromInterval[T Interval](interval T) RetryOptions {
@@ -60,23 +105,22 @@ func retryOptionsFromInterval[T Interval](interval T) RetryOptions {
 	}
 }
 
-var errContinue = errors.New("continue")
+type RetryFunc interface {
+	func() bool | func() error | func() (bool, error)
+}
 
-func asRetryFunc[T RetryFunc](fn T) func() error {
+func asRetryFunc[R RetryFunc](fn R) func() (bool, error) {
 	switch fn := any(fn).(type) {
-	case func():
-		return func() error {
-			fn()
-			return errContinue
-		}
 	case func() bool:
-		return func() error {
-			if fn() {
-				return nil
-			}
-			return errContinue
+		return func() (bool, error) {
+			return fn(), nil
 		}
 	case func() error:
+		return func() (bool, error) {
+			err := fn()
+			return err == nil, err
+		}
+	case func() (bool, error):
 		return fn
 	default:
 		panic("unreachable")
