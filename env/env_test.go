@@ -404,4 +404,19 @@ func TestParse(t *testing.T) {
 			}]()), "cannot validate number range")
 		})
 	})
+
+	t.Run("skip unexported", func(t *testing.T) {
+		assert.WithEnviron(t, map[string]string{
+			"NAME":     "value",
+			"NAME_PTR": "value",
+		}, func() {
+			opts := env.MustParseFor[struct {
+				name    string  `env:"NAME"`
+				nameptr *string `env:"NAME_PTR"`
+			}]()
+
+			assert.Equal(t, "", opts.name)
+			assert.Equal(t, nil, opts.nameptr)
+		})
+	})
 }

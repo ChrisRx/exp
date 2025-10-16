@@ -141,7 +141,11 @@ func (p *Parser) Parse(v any) error {
 	// The parser root prefix should be added to the initial fields if it is set to
 	// ensure the prefix is set for all child fields.
 	for i := range rv.NumField() {
-		if err := p.parse(rv.Field(i), newField(rv.Type().Field(i), p.RootPrefix)); err != nil {
+		field := newField(rv.Type().Field(i), p.RootPrefix)
+		if !field.Exported {
+			continue
+		}
+		if err := p.parse(rv.Field(i), field); err != nil {
 			return err
 		}
 	}
@@ -246,6 +250,7 @@ func underlying(rv reflect.Value) reflect.Value {
 type Field struct {
 	Name      string
 	Anonymous bool
+	Exported  bool
 
 	// tags
 	Env         string
@@ -263,6 +268,7 @@ func newField(st reflect.StructField, prefixes ...string) Field {
 	return Field{
 		Name:        st.Name,
 		Anonymous:   st.Anonymous,
+		Exported:    st.IsExported(),
 		Env:         st.Tag.Get("env"),
 		Default:     st.Tag.Get("default"),
 		DefaultExpr: st.Tag.Get("$default"),
