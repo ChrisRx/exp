@@ -406,17 +406,20 @@ func TestParse(t *testing.T) {
 	})
 
 	t.Run("skip unexported", func(t *testing.T) {
+		type Nested struct {
+			name *string `env:"NAME"`
+		}
 		assert.WithEnviron(t, map[string]string{
-			"NAME":     "value",
-			"NAME_PTR": "value",
+			"NAME":        "value",
+			"NESTED_NAME": "value",
 		}, func() {
 			opts := env.MustParseFor[struct {
-				name    string  `env:"NAME"`
-				nameptr *string `env:"NAME_PTR"`
+				name   string  `env:"NAME"`
+				Nested *Nested `env:"NESTED"`
 			}]()
 
 			assert.Equal(t, "", opts.name)
-			assert.Equal(t, nil, opts.nameptr)
+			assert.Equal(t, &Nested{}, opts.Nested)
 		})
 	})
 }

@@ -141,11 +141,7 @@ func (p *Parser) Parse(v any) error {
 	// The parser root prefix should be added to the initial fields if it is set to
 	// ensure the prefix is set for all child fields.
 	for i := range rv.NumField() {
-		field := newField(rv.Type().Field(i), p.RootPrefix)
-		if !field.Exported {
-			continue
-		}
-		if err := p.parse(rv.Field(i), field); err != nil {
+		if err := p.parse(rv.Field(i), newField(rv.Type().Field(i), p.RootPrefix)); err != nil {
 			return err
 		}
 	}
@@ -153,6 +149,10 @@ func (p *Parser) Parse(v any) error {
 }
 
 func (p *Parser) parse(rv reflect.Value, field Field) error {
+	if !field.Exported {
+		return nil
+	}
+
 	switch {
 	case rv.Kind() == reflect.Pointer:
 		if rv.IsNil() {
