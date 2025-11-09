@@ -66,11 +66,23 @@ func (g *Group) Go(fn func(context.Context) error) *Group {
 }
 
 // Wait blocks until all the goroutines in this group have returned. If any
-// errors occur, the first error encountered will be returned. It will also
-// block until at least one goroutine is scheduled.
+// errors occur, the first error encountered will be returned.
+//
+// Wait will block until at least one goroutine is scheduled. This is helpful
+// to ensure that if Wait is called before calls scheduling goroutines, it
+// won't finish waiting prematurely. If there is a possibility that no
+// goroutines might be scheduled, then [TryWait] should be called instead.
 func (g *Group) Wait() error {
-	defer g.reset()
 	g.ready.Wait()
+	return g.TryWait()
+}
+
+// TryWait blocks until all the goroutines in this group have returned. If any
+// errors occur, the first error encountered will be returned.
+//
+// Unlike [Wait], if no goroutines are scheduled, this returns immediately.
+func (g *Group) TryWait() error {
+	defer g.reset()
 	g.wg.Wait()
 	g.cancel(g.err)
 	return g.err
