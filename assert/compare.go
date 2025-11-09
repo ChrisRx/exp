@@ -40,7 +40,7 @@ func compare(x, y any) int {
 
 func contains[S ~[]E, E any](s S, v E) bool {
 	return slices.Contains(slices.Map(s, func(elem E) bool {
-		return len(Diff(elem, v)) > 0
+		return len(Diff(elem, v)) == 0
 	}), true)
 }
 
