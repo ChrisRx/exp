@@ -122,6 +122,7 @@ var builtins = map[string]reflect.Value{
 	"getwd":    reflect.ValueOf(func() string { return must.Get0(os.Getwd()) }),
 	"tempdir":  reflect.ValueOf(os.TempDir),
 	"joinpath": reflect.ValueOf(filepath.Join),
+	"getenv":   reflect.ValueOf(os.Getenv),
 
 	// time
 	"now": reflect.ValueOf(func() time.Time {
