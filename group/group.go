@@ -49,6 +49,12 @@ func (g *Group) Go(fn func(context.Context) error) *Group {
 		defer g.wg.Done()
 		defer g.ready.Done()
 
+		// If the context was canceled while waiting to acquire, we shouldn't
+		// attempt to run the user-provided function.
+		if g.ctx.Err() != nil {
+			return
+		}
+
 		if err := fn(g.ctx); err != nil {
 			g.once.Do(func() {
 				g.err = err
