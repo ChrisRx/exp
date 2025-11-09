@@ -13,6 +13,7 @@ type Group struct {
 	ctx    context.Context
 	cancel context.CancelCauseFunc
 
+	limit sync.Semaphore
 	wg    sync.WaitGroup
 	done  sync.Chan[error]
 	ready sync.Waiter
@@ -28,7 +29,7 @@ func New(ctx context.Context, opts ...GroupOption) *Group {
 		parent: ctx,
 	}
 	if o.Limit != 0 {
-		g.wg.SetLimit(o.Limit)
+		g.limit.SetLimit(o.Limit)
 	}
 	g.ctx, g.cancel = context.WithCancelCause(ctx)
 	return g
@@ -43,8 +44,10 @@ func New(ctx context.Context, opts ...GroupOption) *Group {
 func (g *Group) Go(fn func(context.Context) error) *Group {
 	g.wg.Add(1)
 	go func() {
-		defer g.ready.Done()
+		g.limit.Acquire(1)
+		defer g.limit.Release()
 		defer g.wg.Done()
+		defer g.ready.Done()
 
 		if err := fn(g.ctx); err != nil {
 			g.once.Do(func() {
