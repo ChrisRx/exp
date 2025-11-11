@@ -9,6 +9,13 @@ import (
 
 //go:generate go tool aliaspkg -docs=all
 
+// ContextKey represents a key that stores values in a [context.Context].
+type ContextKey[V any] interface {
+	Has(ctx context.Context) bool
+	Value(ctx context.Context) V
+	WithValue(parent context.Context, value V) context.Context
+}
+
 type key[V any] struct {
 	_ safe.NoCopy
 }
@@ -21,7 +28,7 @@ type key[V any] struct {
 //
 // Key is intended to make package level context keys that can be shared by
 // other packages.
-func Key[V any]() *key[V] {
+func Key[V any]() ContextKey[V] {
 	return &key[V]{}
 }
 

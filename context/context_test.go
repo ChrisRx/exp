@@ -33,4 +33,13 @@ func TestKey(t *testing.T) {
 		ctx = k.WithValue(ctx, append(k.Value(ctx), "c"))
 		assert.Equal(t, []string{"a", "b", "c"}, k.Value(ctx))
 	})
+
+	t.Run("wrapped", func(t *testing.T) {
+		k := context.Key[string]()
+
+		ctx := t.Context()
+		ctx = context.WithValue(ctx, k, "itworks")
+		assert.Equal(t, "itworks", ctx.Value(k))
+		assert.Equal(t, "itworks", k.Value(ctx))
+	})
 }
