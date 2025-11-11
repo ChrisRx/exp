@@ -94,3 +94,18 @@ func ToSnakeCase(s string) string {
 func ToString[T fmt.Stringer](s T) string {
 	return s.String()
 }
+
+func Slug(s string) string {
+	var sb strings.Builder
+	for _, b := range s {
+		switch {
+		case ('a' <= b && b <= 'z') || ('0' <= b && b <= '9') || b == ' ':
+			sb.WriteRune(b)
+		case ('A' <= b && b <= 'Z'):
+			sb.WriteRune(b + 'a' - 'A')
+		default:
+			sb.WriteByte('-')
+		}
+	}
+	return strings.Trim(sb.String(), "-")
+}
