@@ -84,6 +84,14 @@ func MustParseFor[T any](opts ...ParserOption) T {
 	return v
 }
 
+// Deferred is a special type used in fields to configure calling methods on
+// structs after parsing is done.
+type Deferred bool
+
+func isDeferred(rv reflect.Value) bool {
+	return rv.Type() == reflect.TypeFor[Deferred]()
+}
+
 type ParserOption func(*Parser)
 
 // DisableAutoPrefix is an option for [Parser] that disables the auto-prefix
@@ -115,6 +123,8 @@ type Parser struct {
 	DisableAutoPrefix bool
 	RootPrefix        string
 	RequireTagged     bool
+
+	deferred []string
 }
 
 // NewParser constructs a new [Parser] using the provided options.
@@ -145,11 +155,21 @@ func (p *Parser) Parse(v any) error {
 			return err
 		}
 	}
+	for _, deferred := range p.deferred {
+		method := rv.MethodByName(deferred)
+		if !method.IsValid() {
+			return fmt.Errorf("deferred method is invalid: %q", deferred)
+		}
+		if method.Type().NumIn() > 0 {
+			return fmt.Errorf("deferred method cannot accept arguments")
+		}
+		method.Call(nil)
+	}
 	return nil
 }
 
 func (p *Parser) parse(rv reflect.Value, field Field) error {
-	if !field.Exported {
+	if !field.Exported && !isDeferred(rv) {
 		return nil
 	}
 
@@ -161,6 +181,18 @@ func (p *Parser) parse(rv reflect.Value, field Field) error {
 			rv.Set(reflect.New(rv.Type().Elem()))
 		}
 		return p.parse(reflect.Indirect(rv), field)
+	case isDeferred(rv):
+		s, ok := os.LookupEnv(field.Key())
+		if !ok {
+			if field.Default == "" {
+				return nil
+			}
+			s = field.Default
+		}
+		if must.Get0(strconv.ParseBool(s)) {
+			p.deferred = append(p.deferred, field.DeferredMethod)
+		}
+		return nil
 	case isStruct(rv):
 		// Any prefixes from the parent field should be added to child fields. An
 		// additional prefix will added if the env tag is set, or if auto prefix is
@@ -261,22 +293,25 @@ type Field struct {
 	Required    bool
 	Layout      string
 
+	DeferredMethod string
+
 	prefixes []string
 }
 
 func newField(st reflect.StructField, prefixes ...string) Field {
 	return Field{
-		Name:        st.Name,
-		Anonymous:   st.Anonymous,
-		Exported:    st.IsExported(),
-		Env:         st.Tag.Get("env"),
-		Default:     st.Tag.Get("default"),
-		DefaultExpr: st.Tag.Get("$default"),
-		Validate:    st.Tag.Get("validate"),
-		Separator:   cmp.Or(st.Tag.Get("sep"), ","),
-		Required:    must.Get0(strconv.ParseBool(st.Tag.Get("required"))),
-		Layout:      cmp.Or(st.Tag.Get("layout"), time.RFC3339Nano),
-		prefixes:    slices.Map(slices.DeleteFunc(prefixes, ptr.IsZero), strings.ToUpper),
+		Name:           st.Name,
+		Anonymous:      st.Anonymous,
+		Exported:       st.IsExported(),
+		Env:            st.Tag.Get("env"),
+		Default:        st.Tag.Get("default"),
+		DefaultExpr:    st.Tag.Get("$default"),
+		Validate:       st.Tag.Get("validate"),
+		Separator:      cmp.Or(st.Tag.Get("sep"), ","),
+		Required:       must.Get0(strconv.ParseBool(st.Tag.Get("required"))),
+		Layout:         cmp.Or(st.Tag.Get("layout"), time.RFC3339Nano),
+		DeferredMethod: st.Tag.Get("method"),
+		prefixes:       slices.Map(slices.DeleteFunc(prefixes, ptr.IsZero), strings.ToUpper),
 	}
 }
 
