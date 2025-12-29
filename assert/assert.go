@@ -13,6 +13,17 @@ import (
 	"go.chrisrx.dev/x/assert/internal/slices"
 )
 
+func Ok[T any](tb testing.TB, v T, err error) T {
+	tb.Helper()
+
+	if err != nil {
+		tb.Fatal(err)
+		var zero T
+		return zero
+	}
+	return v
+}
+
 func Equal[T any](tb testing.TB, expected, actual T, args ...any) {
 	if diff := Diff(expected, actual); len(diff) > 0 {
 		tb.Helper()
