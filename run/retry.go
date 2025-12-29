@@ -13,6 +13,7 @@ import (
 type RetryOptions struct {
 	InitialInterval     time.Duration
 	MaxAttempts         int
+	MaxAttemptTime      time.Duration
 	MaxElapsedTime      time.Duration
 	MaxInterval         time.Duration
 	Multiplier          float64

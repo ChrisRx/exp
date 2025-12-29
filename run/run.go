@@ -19,7 +19,7 @@ func Every[T Interval](ctx context.Context, fn func(), interval T) {
 	// ignore these user provided values so this runs indefinitely
 	ro.MaxAttempts = 0
 	ro.MaxElapsedTime = 0
-	_ = Do(ctx, func() (bool, error) {
+	_ = Do(ctx, func(ctx context.Context) (bool, error) {
 		fn()
 		return false, nil
 	}, ro)
@@ -37,7 +37,10 @@ func Every[T Interval](ctx context.Context, fn func(), interval T) {
 // The interval can be either a [time.Duration] or, if more complex retry logic
 // is required, a [RetryOptions].
 func Until[R RetryFunc, T Interval](ctx context.Context, fn R, interval T) error {
-	return Do(ctx, asRetryFunc(fn), retryOptionsFromInterval(interval))
+	return Do(ctx, func(ctx context.Context) (bool, error) {
+		ok, err := asRetryFunc(fn)()
+		return ok, err
+	}, retryOptionsFromInterval(interval))
 }
 
 // Unless runs a function periodically for the provided interval. This is used
@@ -52,16 +55,16 @@ func Until[R RetryFunc, T Interval](ctx context.Context, fn R, interval T) error
 // The interval can be either a [time.Duration] or, if more complex retry logic
 // is required, a [RetryOptions].
 func Unless[R RetryFunc, T Interval](ctx context.Context, fn R, interval T) error {
-	return Do(ctx, func() (bool, error) {
+	return Do(ctx, func(ctx context.Context) (bool, error) {
 		ok, err := asRetryFunc(fn)()
 		return !ok, err
 	}, retryOptionsFromInterval(interval))
 }
 
-func Do(ctx context.Context, fn func() (bool, error), ro RetryOptions) error {
+func Do(parent context.Context, fn func(context.Context) (bool, error), ro RetryOptions) error {
 	if ro.MaxElapsedTime != 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, ro.MaxElapsedTime)
+		parent, cancel = context.WithTimeout(parent, ro.MaxElapsedTime)
 		defer cancel()
 	}
 	ticker := backoff.NewTicker(ro.Backoff())
@@ -72,17 +75,23 @@ func Do(ctx context.Context, fn func() (bool, error), ro RetryOptions) error {
 		select {
 		case <-ticker.Next():
 			attempts++
+			ctx := parent
+			if ro.MaxAttemptTime != 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(parent, ro.MaxAttemptTime)
+				defer cancel()
+			}
 			done, err := func() (_ bool, reterr error) {
 				defer must.Catch(&reterr)
-				return fn()
+				return fn(ctx)
 			}()
 			if done {
 				return err
 			}
 			if ro.MaxAttempts != 0 && attempts >= ro.MaxAttempts {
-				return fmt.Errorf("max attempts")
+				return fmt.Errorf("max attempts: %w", err)
 			}
-		case <-ctx.Done():
+		case <-parent.Done():
 			return nil
 		}
 	}
