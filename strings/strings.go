@@ -16,24 +16,32 @@ import (
 // and trims the indents from all lines.
 func Dedent(s string) string {
 	scanner := bufio.NewScanner(strings.NewReader(s))
-	var indent []byte
+	var indent, line []byte
 	var b bytes.Buffer
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		if len(line) == 0 {
+	for i := 0; scanner.Scan(); i++ {
+		line = scanner.Bytes()
+
+		// The first line is blank so do not include it in the output.
+		if len(line) == 0 && i == 0 {
 			continue
 		}
-		if indent == nil {
+
+		// Only set the indent if the line is non-empty and the indent hasn't
+		// already been set.
+		if len(line) != 0 && indent == nil {
 			indent = detect(line).Bytes()
 		}
 		line = bytes.TrimPrefix(line, indent)
-		if len(bytes.TrimSpace(line)) == 0 {
-			continue
-		}
 		b.Write(line)
 		b.WriteRune('\n')
 	}
-	return b.String()
+	out := b.Bytes()
+
+	// Don't include the last line if blank.
+	if len(bytes.TrimSpace(line)) == 0 {
+		out = bytes.TrimSuffix(out, append(line, '\n'))
+	}
+	return string(out)
 }
 
 func detect(line []byte) (indent indent) {
