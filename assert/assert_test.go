@@ -62,7 +62,7 @@ func TestAssert(t *testing.T) {
 		err2 := fmt.Errorf("wrapped: %w", err)
 		err3 := fmt.Errorf("final: %w", err2)
 		assert.Error(t, err3, err3)
-		assert.Error(t, err3, err2)
+		assert.Error(t, err2, err3)
 		assert.Error(NoFatal(t), err3, fmt.Errorf("whoops"))
 
 		assert.Error(t, "this is an error", fmt.Errorf("this is an error"))

@@ -67,7 +67,7 @@ func NoPanic(tb testing.TB, fn func(), args ...any) {
 
 func Error(tb testing.TB, expected any, actual error, args ...any) bool {
 	if expected == nil {
-		if errors.Is(nil, actual) {
+		if errors.Is(actual, nil) {
 			return true
 		}
 
@@ -91,7 +91,7 @@ func Error(tb testing.TB, expected any, actual error, args ...any) bool {
 
 	switch expected := expected.(type) {
 	case error:
-		if errors.Is(expected, actual) {
+		if errors.Is(actual, expected) {
 			return true
 		}
 
