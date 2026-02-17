@@ -56,7 +56,7 @@ func (b *Backoff) Next() (next time.Duration) {
 	}()
 
 	// When the min/max interval matches, this is effectively a constant
-	// interval. Alternatively, if the min interval is less than max interval,
+	// interval. Alternatively, if the max interval is less than min interval,
 	// there was probably a misconfiguration of the backoff, so we also just
 	// return early with the specified min interval.
 	if b.MinInterval == b.MaxInterval || b.MinInterval > b.MaxInterval {
