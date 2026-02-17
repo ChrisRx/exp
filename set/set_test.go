@@ -123,6 +123,16 @@ func TestSet(t *testing.T) {
 
 		assert.ElementsMatch(t, s1.List(), s2.List())
 	})
+
+	t.Run("remove", func(t *testing.T) {
+		var s Set[string]
+		s.Add("a", "b", "c")
+		s.Add("")
+		assert.ElementsMatch(t, []string{"a", "b", "c", ""}, s.List())
+
+		s.Remove("")
+		assert.ElementsMatch(t, []string{"a", "b", "c"}, s.List(), "remove zero value")
+	})
 }
 
 type uncomparable struct {
@@ -187,14 +197,14 @@ func BenchmarkEquals(b *testing.B) {
 			s1.All(s2.List()...)
 		}
 	})
-	b.Run("Compare", func(b *testing.B) {
+	b.Run("Equal", func(b *testing.B) {
 		for b.Loop() {
-			Compare(s1, s2)
+			Equal(s1, s2)
 		}
 	})
-	b.Run("Compare (length mismatch)", func(b *testing.B) {
+	b.Run("Equal (length mismatch)", func(b *testing.B) {
 		for b.Loop() {
-			Compare(s1, s3)
+			Equal(s1, s3)
 		}
 	})
 }
