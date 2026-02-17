@@ -1,4 +1,4 @@
-//go:generate go tool aliaspkg -docs=all -ignore=Sort,Reverse
+//go:generate go tool aliaspkg -docs=all -ignore=Sort,Reverse,Max,Min
 
 package slices
 
@@ -7,7 +7,43 @@ import (
 	"slices"
 
 	"go.chrisrx.dev/x/constraints"
+	"go.chrisrx.dev/x/ptr"
 )
+
+func Filter[T any](col []T, fn func(elem T) bool) (result []T) {
+	for _, v := range col {
+		if fn(v) {
+			result = append(result, v)
+		}
+	}
+	return result
+}
+
+func FilterMap[T any, R any](col []T, fn func(elem T) R) (result []R) {
+	for _, v := range col {
+		if v := fn(v); !ptr.IsZero(v) {
+			result = append(result, v)
+		}
+	}
+	return result
+}
+
+func FilterMap2[T any, R any](col []T, fn func(elem T) (R, bool)) (result []R) {
+	for _, v := range col {
+		if v, ok := fn(v); ok {
+			result = append(result, v)
+		}
+	}
+	return result
+}
+
+func FlatMap[T any, R any](col []T, fn func(elem T) []R) []R {
+	results := make([]R, 0)
+	for _, elem := range col {
+		results = append(results, fn(elem)...)
+	}
+	return results
+}
 
 func Map[T any, R any](col []T, fn func(elem T) R) []R {
 	results := make([]R, len(col))
@@ -17,11 +53,43 @@ func Map[T any, R any](col []T, fn func(elem T) R) []R {
 	return results
 }
 
-func Filter[T any](col []T, fn func(elem T) bool) (result []T) {
-	for _, v := range col {
-		if fn(v) {
-			result = append(result, v)
-		}
+func MapEntries[K comparable, V any, T any](col []T, fn func(elem T) (K, V)) map[K]V {
+	result := make(map[K]V)
+	for _, elem := range col {
+		k, v := fn(elem)
+		result[k] = v
+	}
+	return result
+}
+
+func Max[T cmp.Ordered](vals ...T) T {
+	if len(vals) == 0 {
+		var zero T
+		return zero
+	}
+	m := vals[0]
+	for _, v := range vals[1:] {
+		m = max(m, v)
+	}
+	return m
+}
+
+func Min[T cmp.Ordered](vals ...T) T {
+	if len(vals) == 0 {
+		var zero T
+		return zero
+	}
+	m := vals[0]
+	for _, v := range vals[1:] {
+		m = min(m, v)
+	}
+	return m
+}
+
+func N[T constraints.Integer](n T) []T {
+	result := make([]T, n)
+	for i := range int(n) {
+		result[i] = T(i)
 	}
 	return result
 }
@@ -37,20 +105,10 @@ func Partition[S ~[]E, E any](s S, fn func(E) bool) (left, right S) {
 	return
 }
 
-func N[T constraints.Integer](n T) []T {
-	result := make([]T, n)
-	for i := range int(n) {
-		result[i] = T(i)
-	}
-	return result
-}
-
-func FlatMap[T any, R any](col []T, fn func(elem T) []R) []R {
-	results := make([]R, 0)
-	for _, elem := range col {
-		results = append(results, fn(elem)...)
-	}
-	return results
+// Reverse reverses the elements of the slice in place.
+func Reverse[S ~[]E, E any](s S) S {
+	slices.Reverse(s)
+	return s
 }
 
 // Sort sorts a slice of any ordered type in ascending order.
@@ -58,10 +116,4 @@ func FlatMap[T any, R any](col []T, fn func(elem T) []R) []R {
 func Sort[S ~[]E, E cmp.Ordered](x S) S {
 	slices.Sort(x)
 	return x
-}
-
-// Reverse reverses the elements of the slice in place.
-func Reverse[S ~[]E, E any](s S) S {
-	slices.Reverse(s)
-	return s
 }

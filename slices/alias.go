@@ -308,15 +308,6 @@ func IsSortedFunc[S ~[]E, E any](x S, cmp func(a, b E) int) bool {
 	return slices.IsSortedFunc[S, E](x, cmp)
 }
 
-// Min returns the minimal value in x. It panics if x is empty.
-// For floating-point numbers, Min propagates NaNs (any NaN value in x
-// forces the output to be NaN).
-//
-// This is an alias of https://pkg.go.dev/slices#Min.
-func Min[S ~[]E, E cmp.Ordered](x S) E {
-	return slices.Min[S, E](x)
-}
-
 // MinFunc returns the minimal value in x, using cmp to compare elements.
 // It panics if x is empty. If there is more than one minimal element
 // according to the cmp function, MinFunc returns the first one.
@@ -324,15 +315,6 @@ func Min[S ~[]E, E cmp.Ordered](x S) E {
 // This is an alias of https://pkg.go.dev/slices#MinFunc.
 func MinFunc[S ~[]E, E any](x S, cmp func(a, b E) int) E {
 	return slices.MinFunc[S, E](x, cmp)
-}
-
-// Max returns the maximal value in x. It panics if x is empty.
-// For floating-point E, Max propagates NaNs (any NaN value in x
-// forces the output to be NaN).
-//
-// This is an alias of https://pkg.go.dev/slices#Max.
-func Max[S ~[]E, E cmp.Ordered](x S) E {
-	return slices.Max[S, E](x)
 }
 
 // MaxFunc returns the maximal value in x, using cmp to compare elements.
