@@ -52,6 +52,8 @@ func (ro *RetryOptions) Reset() {
 }
 
 // Retry runs a function periodically based on the provided [Options].
+//
+// Deprecated: I don't like it
 func Retry(ctx context.Context, fn func() error, ro RetryOptions) RetryIterator {
 	var attempts int
 	return func(yield func(attempts int, err error) bool) {
