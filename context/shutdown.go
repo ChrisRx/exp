@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"sync"
 	"syscall"
 
 	"go.chrisrx.dev/x/safe"
@@ -35,6 +36,10 @@ type ShutdownContext interface {
 //  2. Any of the functions complete successfully.
 //
 // The execution order is FIFO based on calls to [ShutdownContext.AddHandler].
+// When there are no more handler functions to execute, the context is canceled
+// and the default signal behavior is restored. If no handlers are given, a
+// signal received will only cancel the context and restore default signal
+// behavior.
 func Shutdown(signals ...os.Signal) ShutdownContext {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &shutdownCtx{
@@ -84,6 +89,7 @@ type shutdownCtx struct {
 	context.Context
 
 	ch       chan os.Signal
+	mu       sync.Mutex
 	handlers []func()
 }
 
@@ -92,11 +98,15 @@ var _ context.Context = (*shutdownCtx)(nil)
 // AddHandler adds a new handler function to a [ShutdownContext] to run when it
 // is marked done.
 func (s *shutdownCtx) AddHandler(fn func()) {
+	s.mu.Lock()
 	s.handlers = append(s.handlers, fn)
+	s.mu.Unlock()
 }
 
 func (s *shutdownCtx) nextHandler() (next func()) {
+	s.mu.Lock()
 	next, s.handlers = s.handlers[0], s.handlers[1:]
+	s.mu.Unlock()
 	return
 }
 
