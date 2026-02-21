@@ -21,16 +21,22 @@ func Dedent(s string) string {
 	for i := 0; scanner.Scan(); i++ {
 		line = scanner.Bytes()
 
-		// The first line is blank so do not include it in the output.
-		if len(line) == 0 && i == 0 {
-			continue
+		if i == 0 {
+			// The first line is blank so do not include it in the output.
+			if len(line) == 0 {
+				continue
+			}
+			if v := detect(line); v.Len() > 0 {
+				indent = v.Bytes()
+			}
+		} else {
+			// Only set the indent if the line is non-empty and the indent hasn't
+			// already been set.
+			if len(line) != 0 && indent == nil {
+				indent = detect(line).Bytes()
+			}
 		}
 
-		// Only set the indent if the line is non-empty and the indent hasn't
-		// already been set.
-		if len(line) != 0 && indent == nil {
-			indent = detect(line).Bytes()
-		}
 		line = bytes.TrimPrefix(line, indent)
 		b.Write(line)
 		b.WriteRune('\n')
@@ -103,17 +109,43 @@ func ToString[T fmt.Stringer](s T) string {
 	return s.String()
 }
 
+var transliterations = map[rune]string{
+	'&': "and",
+	'à': "a",
+	'é': "e",
+}
+
 func Slug(s string) string {
 	var sb strings.Builder
 	for _, b := range s {
 		switch {
-		case ('a' <= b && b <= 'z') || ('0' <= b && b <= '9') || b == ' ':
+		case ('a' <= b && b <= 'z') || ('0' <= b && b <= '9'):
 			sb.WriteRune(b)
 		case ('A' <= b && b <= 'Z'):
 			sb.WriteRune(b + 'a' - 'A')
 		default:
-			sb.WriteByte('-')
+			if b, ok := transliterations[b]; ok {
+				sb.WriteString(b)
+				continue
+			}
+			sb.WriteRune('-')
 		}
 	}
 	return strings.Trim(sb.String(), "-")
+}
+
+func ToCamelCase(s string) string {
+	var b strings.Builder
+	for i, v := range strings.TrimSpace(s) {
+		if !unicode.IsLetter(v) && !unicode.IsDigit(v) {
+			continue
+		}
+		switch {
+		case i == 0 || s[i-1] == '_':
+			b.WriteRune(unicode.ToUpper(v))
+		default:
+			b.WriteRune(unicode.ToLower(v))
+		}
+	}
+	return b.String()
 }
