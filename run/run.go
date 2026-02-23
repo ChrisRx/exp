@@ -92,7 +92,7 @@ func Do(parent context.Context, fn func(context.Context) (bool, error), ro Retry
 				return fmt.Errorf("max attempts: %w", err)
 			}
 		case <-parent.Done():
-			return nil
+			return parent.Err()
 		}
 	}
 }
