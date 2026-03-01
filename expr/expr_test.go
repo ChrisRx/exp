@@ -41,11 +41,12 @@ func (tc testCase) run(t *testing.T) {
 
 func runAll(t *testing.T, cases []testCase) {
 	t.Helper()
-	for _, tc := range cases {
+	for i, tc := range cases {
 		switch {
 		case tc.name != "":
 			t.Run(tc.name, tc.run)
 		default:
+			tc.name = fmt.Sprintf("test #%d", i+1)
 			tc.run(t)
 		}
 	}
@@ -61,6 +62,46 @@ func TestEval(t *testing.T) {
 			{name: "right shift", input: `32 >> 1`, expected: 32 >> 1},
 			{name: "left shift", input: `1 << 32`, expected: 1 << 32},
 			{name: "right shift", input: `32 >> 1`, expected: 32 >> 1},
+		})
+	})
+
+	t.Run("integer literals", func(t *testing.T) {
+		runAll(t, []testCase{
+			{name: "", input: "42", expected: 42},
+			{name: "", input: "4_2", expected: 4_2},
+			{name: "", input: "8600", expected: 8600},
+			{name: "", input: "0_600", expected: 0_600},
+			{name: "", input: "0o600", expected: 0o600},
+			{name: "", input: "0O600", expected: 0o600},
+			{name: "", input: "0xBadFace", expected: 0xBadFace},
+			{name: "", input: "0xBad_Face", expected: 0xBad_Face},
+			{name: "", input: "0x_67_7a_2f_cc_40_c6", expected: 0x_67_7a_2f_cc_40_c6},
+			// TODO: This truncates large numbers into a float64 but not sure if this
+			// should do this or should just error.
+			{name: "", input: "170141183460469231731687303715884105727", expected: float64(170141183460469231731687303715884105727)},
+			{name: "", input: "170_141183_460469_231731_687303_715884_105727", expected: float64(170141183460469231731687303715884105727)},
+		})
+	})
+
+	t.Run("floating-point literals", func(t *testing.T) {
+		runAll(t, []testCase{
+			{name: "", input: "0.", expected: 0},
+			{name: "", input: "72.40", expected: 72.40},
+			{name: "", input: "072.40", expected: 072.40},
+			{name: "", input: "2.71828", expected: 2.71828},
+			{name: "", input: "1.e+0", expected: 1.e+0},
+			{name: "", input: "6.67428e-11", expected: 6.67428e-11},
+			{name: "", input: "1E6", expected: 1e6},
+			{name: "", input: ".25", expected: .25},
+			{name: "", input: ".12345E+5", expected: .12345e+5},
+			{name: "", input: "1_5.", expected: 1_5.},
+			{name: "", input: "0.15e+0_2", expected: 0.15e+0_2},
+			{name: "", input: "0x1p-2", expected: 0x1p-2},
+			{name: "", input: "0x2.p10", expected: 0x2.p10},
+			{name: "", input: "0x1.Fp+0", expected: 0x1.Fp+0},
+			{name: "", input: "0X.8p-0", expected: 0x.8p-0},
+			{name: "", input: "0X_1FFFP-16", expected: 0x_1FFFp-16},
+			{name: "", input: "0x15e-2", expected: 0x15e - 2},
 		})
 	})
 

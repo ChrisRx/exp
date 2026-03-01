@@ -6,12 +6,14 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"math/big"
 	"reflect"
 	"strconv"
 	"time"
 	"unicode"
 	"unicode/utf8"
 
+	"go.chrisrx.dev/x/must"
 	"go.chrisrx.dev/x/slices"
 	"go.chrisrx.dev/x/strings"
 )
@@ -101,9 +103,18 @@ func (e *Expr) eval(expr ast.Expr) (reflect.Value, error) {
 func (e *Expr) evalBasicLit(expr *ast.BasicLit) (reflect.Value, error) {
 	switch expr.Kind {
 	case token.INT:
-		i, err := strconv.ParseInt(expr.Value, 10, 64)
+		i, err := strconv.ParseInt(expr.Value, 0, 64)
 		if err != nil {
-			return reflect.Value{}, err
+			bi := new(big.Int)
+			bi.SetString(expr.Value, 0)
+			switch {
+			case bi.IsInt64():
+				return reflect.ValueOf(bi.Int64()), nil
+			case bi.IsUint64():
+				return reflect.ValueOf(bi.Uint64()), nil
+			default:
+				return reflect.ValueOf(must.Get0(bi.Float64())), nil
+			}
 		}
 		return reflect.ValueOf(i), nil
 	case token.FLOAT:
