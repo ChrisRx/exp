@@ -77,13 +77,13 @@ func (p *printer) print(rv reflect.Value, field Field) {
 				fmt.Print(strings.Repeat("  ", p.indent))
 				fmt.Printf("env=%s\n", field.Key())
 			}
-			if field.Default != "" {
+			if field.Default() != "" {
 				fmt.Print(strings.Repeat("  ", p.indent))
-				fmt.Printf("default=%s\n", field.Default)
+				fmt.Printf("default=%s\n", field.Default())
 			}
 			if rv.Type().Field(i).Tag.Get("layout") != "" {
 				fmt.Print(strings.Repeat("  ", p.indent))
-				fmt.Printf("layout=%s\n", field.Layout)
+				fmt.Printf("layout=%s\n", field.Layout())
 			}
 			p.print(rv.Field(i), field)
 			fmt.Print(strings.Repeat("  ", p.indent-1))

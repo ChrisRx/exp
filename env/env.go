@@ -4,19 +4,18 @@ package env
 
 import (
 	"cmp"
-	"encoding"
 	"fmt"
 	"os"
 	"reflect"
 	"strconv"
-	"time"
 	"unicode"
 
+	"go.chrisrx.dev/x/convert"
 	"go.chrisrx.dev/x/expr"
+	"go.chrisrx.dev/x/internal/reflectx"
 	"go.chrisrx.dev/x/must"
-	"go.chrisrx.dev/x/ptr"
-	"go.chrisrx.dev/x/slices"
 	"go.chrisrx.dev/x/strings"
+	"go.chrisrx.dev/x/structs"
 )
 
 // Parse parses tags for the provided struct and sets values from environment
@@ -46,7 +45,7 @@ func ParseFor[T any](opts ...ParserOption) (T, error) {
 		}
 		return v, nil
 	}
-	v, ok := typeAssert[T](rv)
+	v, ok := reflectx.TypeAssert[T](rv)
 	if !ok {
 		return v, fmt.Errorf("invalid type: %v", v)
 	}
@@ -54,24 +53,6 @@ func ParseFor[T any](opts ...ParserOption) (T, error) {
 		return v, err
 	}
 	return v, nil
-}
-
-func typeAssert[T any](rv reflect.Value) (T, bool) {
-	rt := reflect.TypeFor[T]()
-	if rt.Kind() != reflect.Interface {
-		if rv.Type().Kind() == reflect.Pointer && rv.IsNil() {
-			rv = reflect.New(rt.Elem())
-		}
-	}
-	if rv.CanAddr() {
-		rv = rv.Addr()
-	}
-	if !rv.CanInterface() {
-		var zero T
-		return zero, false
-	}
-	v, ok := rv.Interface().(T)
-	return v, ok
 }
 
 // MustParseFor is a convenience function for calling [ParseFor] that panics if
@@ -169,7 +150,7 @@ func (p *Parser) Parse(v any) error {
 }
 
 func (p *Parser) parse(rv reflect.Value, field Field) error {
-	if !field.Exported && !isDeferred(rv) {
+	if !field.IsExported() && !isDeferred(rv) {
 		return nil
 	}
 
@@ -184,16 +165,21 @@ func (p *Parser) parse(rv reflect.Value, field Field) error {
 	case isDeferred(rv):
 		s, ok := os.LookupEnv(field.Key())
 		if !ok {
-			if field.Default == "" {
+			if field.Default() == "" {
 				return nil
 			}
-			s = field.Default
+			s = field.Default()
 		}
 		if must.Get0(strconv.ParseBool(s)) {
 			p.deferred = append(p.deferred, field.DeferredMethod)
 		}
 		return nil
-	case isStruct(rv):
+	case structs.HasConversion(rv), structs.IsWellKnown(rv):
+		// If we have a custom parser or a common interface, it is important that
+		// we don't range over it as a struct, so we go ahead and parse it as a
+		// singular value.
+		return p.parseSingular(rv, field)
+	case rv.Kind() == reflect.Struct:
 		// Any prefixes from the parent field should be added to child fields. An
 		// additional prefix will added if the env tag is set, or if auto prefix is
 		// not disabled and the parent field wasn't anonymous (aka embedded).
@@ -211,37 +197,41 @@ func (p *Parser) parse(rv reflect.Value, field Field) error {
 		}
 		return nil
 	default:
-		if !p.RequireTagged && field.Env == "" {
-			return nil
-		}
-		if !isValidEnv(field.Env) {
-			return fmt.Errorf("env tag must only contain letters, digits or _: %q", field.Env)
-		}
-		if err := field.set(rv); err != nil {
+		return p.parseSingular(rv, field)
+	}
+}
+
+func (p *Parser) parseSingular(rv reflect.Value, field Field) error {
+	if !p.RequireTagged && field.Env == "" {
+		return nil
+	}
+	if !isValidEnv(field.Env) {
+		return fmt.Errorf("env tag must only contain letters, digits or _: %q", field.Env)
+	}
+	if err := field.set(rv); err != nil {
+		return err
+	}
+	if field.Validate != "" {
+		result, err := expr.Eval(field.Validate, expr.Env(map[string]reflect.Value{
+			field.Name: rv,
+			"self":     rv,
+		}))
+		if err != nil {
 			return err
 		}
-		if field.Validate != "" {
-			result, err := expr.Eval(field.Validate, expr.Env(map[string]reflect.Value{
-				field.Name: rv,
-				"self":     rv,
-			}))
-			if err != nil {
-				return err
-			}
-			result = underlying(result)
-			if result.Kind() != reflect.Bool {
-				return fmt.Errorf("expected bool, received %v", result.Type())
-			}
-			if !result.Bool() {
-				return fmt.Errorf(strings.Dedent(`
+		result = reflectx.Underlying(result)
+		if result.Kind() != reflect.Bool {
+			return fmt.Errorf("expected bool, received %v", result.Type())
+		}
+		if !result.Bool() {
+			return fmt.Errorf(strings.Dedent(`
 					field %v failed validation:
 						condition: %v
 						value: %q
 				`), field.Name, field.Validate, rv.Interface())
-			}
 		}
-		return nil
 	}
+	return nil
 }
 
 func isValidEnv(s string) bool {
@@ -250,234 +240,11 @@ func isValidEnv(s string) bool {
 	})
 }
 
-// isStruct checks if the provided value is a struct that doesn't have a custom
-// parser or implement a common interface. This is important to prevent ranging
-// over fields for types like [time.Time], where it is a struct but the fields
-// aren't meaningful and we have a parser registered that already knows how to
-// handle it optimally.
-func isStruct(rv reflect.Value) bool {
-	if rv.Type().Kind() != reflect.Struct {
-		return false
-	}
-	if _, ok := customParserFuncs[indirectType(rv.Type())]; ok {
-		return false
-	}
-	if _, ok := typeAssert[encoding.TextUnmarshaler](rv); ok {
-		return false
-	}
-	return true
-}
+type CustomParserFunc[T string, R any] = convert.ConversionFunc[T, R]
 
-func underlying(rv reflect.Value) reflect.Value {
-	if rv.Kind() != reflect.Interface {
-		return rv
-	}
-	if !rv.CanInterface() {
-		panic(fmt.Errorf("underlying: cannot interface: %v", rv.Type()))
-	}
-	return reflect.ValueOf(rv.Interface())
-}
-
-// Field represents a parsed struct field.
-type Field struct {
-	Name      string
-	Anonymous bool
-	Exported  bool
-
-	// tags
-	Env         string
-	Default     string
-	DefaultExpr string
-	Validate    string
-	Separator   string
-	Required    bool
-	Layout      string
-
-	DeferredMethod string
-
-	prefixes []string
-}
-
-func newField(st reflect.StructField, prefixes ...string) Field {
-	return Field{
-		Name:           st.Name,
-		Anonymous:      st.Anonymous,
-		Exported:       st.IsExported(),
-		Env:            st.Tag.Get("env"),
-		Default:        st.Tag.Get("default"),
-		DefaultExpr:    st.Tag.Get("$default"),
-		Validate:       st.Tag.Get("validate"),
-		Separator:      cmp.Or(st.Tag.Get("sep"), ","),
-		Required:       must.Get0(strconv.ParseBool(st.Tag.Get("required"))),
-		Layout:         cmp.Or(st.Tag.Get("layout"), time.RFC3339Nano),
-		DeferredMethod: st.Tag.Get("method"),
-		prefixes:       slices.Map(slices.DeleteFunc(prefixes, ptr.IsZero), strings.ToUpper),
-	}
-}
-
-// Key returns the environment variable name in screaming snake case. It
-// includes any prefixes defined for this field.
-func (f Field) Key() string {
-	return strings.Join(append(f.prefixes, f.Env), "_")
-}
-
-func (f Field) set(rv reflect.Value) error {
-	s, ok := os.LookupEnv(f.Key())
-	if !ok {
-		if f.DefaultExpr != "" {
-			v, err := expr.Eval(f.DefaultExpr)
-			if err != nil {
-				return err
-			}
-			if v.CanConvert(rv.Type()) {
-				v = v.Convert(rv.Type())
-			}
-			if v.Type().PkgPath() == "time" && v.Type().Name() == "Time" && rv.Kind() == reflect.String {
-				if method := v.MethodByName("Format"); method.IsValid() {
-					if results := method.Call([]reflect.Value{reflect.ValueOf(f.Layout)}); len(results) > 0 {
-						v = results[0]
-					}
-				}
-			}
-			rv.Set(v)
-			return nil
-		}
-		if f.Default != "" {
-			return f.setValue(rv, f.Default)
-		}
-		if f.Required {
-			return fmt.Errorf("required field not set: %v", f.Key())
-		}
-		return nil
-	}
-	return f.setValue(rv, s)
-}
-
-func (f Field) setValue(rv reflect.Value, s string) error {
-	if !rv.CanSet() {
-		panic(fmt.Errorf("cannot set value: %v", rv.Type()))
-	}
-
-	if rv.Kind() == reflect.Pointer {
-		if rv.IsNil() {
-			rv.Set(reflect.New(rv.Type().Elem()))
-		}
-		return f.setValue(reflect.Indirect(rv), s)
-	}
-
-	// When a type-specific parser function is available, this is preferred to
-	// continuing default parsing.
-	if fn, ok := customParserFuncs[indirectType(rv.Type())]; ok {
-		v, err := fn(f, s)
-		if err != nil {
-			return err
-		}
-		rv.Set(reflect.ValueOf(v))
-		return nil
-	}
-
-	// Common interfaces, like [encoding.TextUnmarshaler], can be used to set the
-	// field value.
-	if iface, ok := typeAssert[encoding.TextUnmarshaler](rv); ok {
-		return iface.UnmarshalText([]byte(s))
-	}
-
-	switch rv.Kind() {
-	case reflect.Array, reflect.Slice:
-		et := rv.Type().Elem()
-		if isInvalidNestedType(et) {
-			return fmt.Errorf("received invalid slice element type: %v", et)
-		}
-		elems := strings.Split(s, f.Separator)
-		sv := reflect.MakeSlice(reflect.SliceOf(et), len(elems), len(elems))
-		for i := range sv.Len() {
-			if err := f.setValue(sv.Index(i), elems[i]); err != nil {
-				return err
-			}
-		}
-		rv.Set(sv)
-		return nil
-	case reflect.Map:
-		elems := strings.Split(s, f.Separator)
-		mv := reflect.MakeMap(rv.Type())
-		for _, elem := range elems {
-			parts := strings.SplitN(elem, "=", 2)
-			if len(parts) != 2 {
-				return fmt.Errorf("cannot parse value into key/value pairs: %q", elem)
-			}
-			key := reflect.New(rv.Type().Key()).Elem()
-			if err := f.setValue(key, parts[0]); err != nil {
-				return err
-			}
-			if isInvalidNestedType(key.Type()) {
-				return fmt.Errorf("received invalid map key type: %v", key.Type())
-			}
-			value := reflect.New(rv.Type().Elem()).Elem()
-			if err := f.setValue(value, parts[1]); err != nil {
-				return err
-			}
-			if isInvalidNestedType(value.Type()) {
-				return fmt.Errorf("received invalid map value type: %v", value.Type())
-			}
-			mv.SetMapIndex(key, value)
-		}
-		rv.Set(mv)
-		return nil
-	case reflect.String:
-		rv.SetString(s)
-		return nil
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		i, err := strconv.ParseInt(s, 10, 64)
-		if err != nil {
-			return err
-		}
-		rv.SetInt(i)
-		return nil
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		i, err := strconv.ParseUint(s, 10, 64)
-		if err != nil {
-			return err
-		}
-		rv.SetUint(i)
-		return nil
-	case reflect.Bool:
-		b, err := strconv.ParseBool(s)
-		if err != nil {
-			return err
-		}
-		rv.SetBool(b)
-		return nil
-	case reflect.Float32:
-		f, err := strconv.ParseFloat(s, 32)
-		if err != nil {
-			return err
-		}
-		rv.SetFloat(f)
-		return nil
-	case reflect.Float64:
-		f, err := strconv.ParseFloat(s, 64)
-		if err != nil {
-			return err
-		}
-		rv.SetFloat(f)
-		return nil
-	default:
-		return fmt.Errorf("received unhandled value: %T", rv.Interface())
-	}
-}
-
-func isInvalidNestedType(rt reflect.Type) bool {
-	switch indirectType(rt).Kind() {
-	case reflect.Array, reflect.Slice, reflect.Map:
-		return true
-	default:
-		return false
-	}
-}
-
-func indirectType(rt reflect.Type) reflect.Type {
-	if rt.Kind() == reflect.Pointer {
-		rt = rt.Elem()
-	}
-	return rt
+// Register registers a custom parser with the provided type parameter. The
+// type parameter must be a non-pointer type, however, registering a type will
+// match for parsing for both the pointer and non-pointer of the type.
+func Register[T any](fn CustomParserFunc[string, T]) {
+	convert.Register(fn)
 }

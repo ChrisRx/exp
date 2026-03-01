@@ -4,8 +4,8 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding"
 	"encoding/pem"
-	"fmt"
 	"log/slog"
 	"net"
 	"net/url"
@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"go.chrisrx.dev/x/assert"
+	"go.chrisrx.dev/x/convert"
 	"go.chrisrx.dev/x/env"
 	"go.chrisrx.dev/x/env/testdata/log"
 	"go.chrisrx.dev/x/env/testdata/pg"
@@ -320,13 +321,8 @@ func TestParse(t *testing.T) {
 		type CustomType struct {
 			S string
 		}
-		assert.Panic(t, fmt.Errorf("cannot register type %T: must not be pointer", &CustomType{}), func() {
-			env.Register[*CustomType](func(field env.Field, s string) (any, error) {
-				return CustomType{S: s}, nil
-			})
-		})
-		env.Register[CustomType](func(field env.Field, s string) (any, error) {
-			return CustomType{S: s}, nil
+		env.Register(func(s string, opts ...convert.Option) (*CustomType, error) {
+			return &CustomType{S: s}, nil
 		})
 		priv, err := rsa.GenerateKey(rand.Reader, 1024)
 		if err != nil {
@@ -422,4 +418,49 @@ func TestParse(t *testing.T) {
 			assert.Equal(t, &Nested{}, opts.Nested)
 		})
 	})
+
+	t.Run("well known interfaces", func(t *testing.T) {
+		assert.WithEnviron(t, map[string]string{
+			"ENCODER": "testing",
+		}, func() {
+			opts := env.MustParseFor[struct {
+				Encoder *Encoder `env:"ENCODER"`
+			}]()
+
+			assert.Equal(t, "testing", opts.Encoder.Value)
+		})
+	})
+
+	t.Run("deferred methods", func(t *testing.T) {
+		assert.WithEnviron(t, map[string]string{
+			"ENABLE_SET_DEFAULT": "true",
+		}, func() {
+			opts := env.MustParseFor[struct {
+				*DeferredTest
+			}]()
+
+			assert.Equal(t, "is set", opts.DefaultValue)
+		})
+	})
+}
+
+type Encoder struct {
+	Value string
+}
+
+var _ encoding.TextUnmarshaler = (*Encoder)(nil)
+
+func (e *Encoder) UnmarshalText(data []byte) error {
+	e.Value = string(data)
+	return nil
+}
+
+type DeferredTest struct {
+	_ env.Deferred `env:"ENABLE_SET_DEFAULT" method:"SetDefault"`
+
+	DefaultValue string
+}
+
+func (d *DeferredTest) SetDefault() {
+	d.DefaultValue = "is set"
 }
