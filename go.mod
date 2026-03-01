@@ -1,6 +1,6 @@
 module go.chrisrx.dev/x
 
-go 1.24.5
+go 1.25.0
 
 tool go.chrisrx.dev/tools/cmd/aliaspkg
 
