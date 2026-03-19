@@ -25,11 +25,11 @@ func TestShutdown(t *testing.T) {
 	})
 
 	go func() {
-		ctx.(*shutdownCtx).ch <- syscall.SIGINT
+		handlers.Value(ctx).ch <- syscall.SIGINT
 		time.Sleep(100 * time.Millisecond)
-		ctx.(*shutdownCtx).ch <- syscall.SIGINT
+		handlers.Value(ctx).ch <- syscall.SIGINT
 		time.Sleep(100 * time.Millisecond)
-		ctx.(*shutdownCtx).ch <- syscall.SIGINT
+		handlers.Value(ctx).ch <- syscall.SIGINT
 	}()
 
 	<-ctx.Done()

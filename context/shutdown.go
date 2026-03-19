@@ -2,10 +2,12 @@ package context
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -17,9 +19,14 @@ import (
 type ShutdownContext interface {
 	context.Context
 
-	// AddHandler adds a new handler function to be associated with this
+	// AddHandler adds a new handler function to be associated with a
 	// [ShutdownContext].
 	AddHandler(func())
+
+	// AddCleanup adds cleanup functions associated with a [ShutdownContext].
+	// These are called when the context is cleaned up by the Go runtime. There
+	// is no guarantee that these will run on program exit.
+	AddCleanup(func())
 
 	// Wait blocks until the context is done. This is syntactic sugar for
 	// receiving from [ShutdownContext.Done].
@@ -42,80 +49,65 @@ type ShutdownContext interface {
 // behavior.
 func Shutdown(signals ...os.Signal) ShutdownContext {
 	ctx, cancel := context.WithCancel(context.Background())
+	sh := &shutdownHandlers{ch: make(chan os.Signal, 1)}
+	ctx = handlers.WithValue(ctx, sh)
 	s := &shutdownCtx{
 		Context: ctx,
-		ch:      make(chan os.Signal, 1),
 	}
+
+	logger := logger.With(
+		slog.String("type", fmt.Sprintf("%T", s)),
+		slog.String("addr", fmt.Sprintf("%p", s)),
+	)
+
 	if len(signals) == 0 {
 		signals = defaultShutdownSignals
 	}
-	signal.Notify(s.ch, signals...)
+	signal.Notify(sh.ch, signals...)
 
 	go func() {
 		defer cancel()
-		defer safe.Close(s.ch)
-		defer signal.Stop(s.ch)
+		defer safe.Close(sh.ch)
+		defer signal.Stop(sh.ch)
+		defer runtime.GC()
 
 		for {
 			select {
 			case <-ctx.Done():
+				logger.Debug("parent context canceled")
 				return
-			case _, ok := <-s.ch:
-				if !ok || len(s.handlers) == 0 {
+			case sig, ok := <-sh.ch:
+				if !ok {
+					logger.Debug("signal notify stopped")
+					return
+				}
+				sh := handlers.Value(ctx)
+				if len(sh.handlers) == 0 {
+					logger.Debug("shutdown context done")
+					// Restore normal signal handling and attempt to resend signal back
+					// to this process.
+					signal.Stop(sh.ch)
+					self, _ := os.FindProcess(os.Getpid())
+					self.Signal(sig)
 					return
 				}
 				go func(fn func()) {
 					defer cancel()
 					fn()
-				}(s.nextHandler())
+				}(sh.next())
 			}
 		}
 	}()
 
 	runtime.AddCleanup(s, func(ch chan os.Signal) {
+		logger.Debug("runtime cleanup called")
 		cancel()
-		signal.Stop(ch)
-	}, s.ch)
+		signal.Stop(sh.ch)
+		for _, fn := range handlers.Value(ctx).cleanupHandlers {
+			fn()
+		}
+	}, sh.ch)
 	return s
-}
-
-var defaultShutdownSignals = []os.Signal{
-	os.Interrupt,
-	syscall.SIGINT,
-	syscall.SIGTERM,
-}
-
-type shutdownCtx struct {
-	context.Context
-
-	ch       chan os.Signal
-	mu       sync.Mutex
-	handlers []func()
-}
-
-var _ context.Context = (*shutdownCtx)(nil)
-
-// AddHandler adds a new handler function to a [ShutdownContext] to run when it
-// is marked done.
-func (s *shutdownCtx) AddHandler(fn func()) {
-	s.mu.Lock()
-	s.handlers = append(s.handlers, fn)
-	s.mu.Unlock()
-}
-
-func (s *shutdownCtx) nextHandler() (next func()) {
-	s.mu.Lock()
-	next, s.handlers = s.handlers[0], s.handlers[1:]
-	s.mu.Unlock()
-	return
-}
-
-func (s *shutdownCtx) String() string {
-	return "context.ShutdownContext"
-}
-
-func (s *shutdownCtx) Wait() {
-	<-s.Done()
 }
 
 func AddHandler(ctx context.Context, fn func()) {
@@ -124,5 +116,96 @@ func AddHandler(ctx context.Context, fn func()) {
 		ctx.AddHandler(fn)
 	default:
 		slog.Warn("provided context is not ShutdownContext")
+	}
+}
+
+func AddCleanup(ctx context.Context, fn func()) {
+	switch ctx := ctx.(type) {
+	case ShutdownContext:
+		ctx.AddCleanup(fn)
+	default:
+		slog.Warn("provided context is not ShutdownContext")
+	}
+}
+
+var defaultShutdownSignals = []os.Signal{
+	os.Interrupt,
+	syscall.SIGINT,
+	syscall.SIGTERM,
+}
+
+// context key for shutdown handlers
+var handlers = Key[*shutdownHandlers]()
+
+type shutdownHandlers struct {
+	ch              chan (os.Signal)
+	mu              sync.Mutex
+	handlers        []func()
+	cleanupHandlers []func()
+}
+
+// AddHandler adds a new handler function to a [ShutdownContext] to run when it
+// is marked done.
+func (s *shutdownHandlers) AddHandler(fn func()) {
+	s.mu.Lock()
+	s.handlers = append(s.handlers, fn)
+	s.mu.Unlock()
+}
+
+func (s *shutdownHandlers) next() (next func()) {
+	s.mu.Lock()
+	next, s.handlers = s.handlers[0], s.handlers[1:]
+	s.mu.Unlock()
+	return
+}
+
+func (s *shutdownHandlers) AddCleanup(fn func()) {
+	s.mu.Lock()
+	s.cleanupHandlers = append(s.cleanupHandlers, fn)
+	s.mu.Unlock()
+}
+
+type shutdownCtx struct {
+	context.Context
+}
+
+var _ context.Context = (*shutdownCtx)(nil)
+
+// AddHandler adds a new handler function to a [ShutdownContext] to run when it
+// is marked done.
+func (s *shutdownCtx) AddHandler(fn func()) {
+	handlers.ValueFunc(s.Context, func(sh *shutdownHandlers) {
+		sh.handlers = append(sh.handlers, fn)
+	})
+}
+
+func (s *shutdownCtx) AddCleanup(fn func()) {
+	handlers.ValueFunc(s.Context, func(sh *shutdownHandlers) {
+		sh.cleanupHandlers = append(sh.cleanupHandlers, fn)
+	})
+}
+
+func (s *shutdownCtx) String() string {
+	return "context.ShutdownContext"
+}
+
+func (s *shutdownCtx) Wait() {
+	<-s.Done()
+	runtime.GC()
+}
+
+var (
+	lvl    = new(slog.LevelVar)
+	logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: lvl,
+	}))
+)
+
+func init() {
+	if v, ok := os.LookupEnv("EXP_LOG_LEVEL"); ok {
+		switch strings.ToLower(v) {
+		case "debug":
+			lvl.Set(slog.LevelDebug)
+		}
 	}
 }

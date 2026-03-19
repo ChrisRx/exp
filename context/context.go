@@ -3,6 +3,7 @@ package context
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"go.chrisrx.dev/x/safe"
 )
@@ -13,6 +14,7 @@ import (
 type ContextKey[V any] interface {
 	Has(ctx context.Context) bool
 	Value(ctx context.Context) V
+	ValueFunc(ctx context.Context, fn func(V))
 	WithValue(parent context.Context, value V) context.Context
 }
 
@@ -47,6 +49,16 @@ func (k *key[V]) Value(ctx context.Context) V {
 	}
 	var zero V
 	return zero
+}
+
+func (k *key[V]) ValueFunc(ctx context.Context, fn func(V)) {
+	if v, ok := ctx.Value(k).(V); ok {
+		fn(v)
+	} else {
+		logger.Debug("context does not contain value",
+			slog.String("type", fmt.Sprintf("%T", *new(V))),
+		)
+	}
 }
 
 // WithValue returns a new [context.Context] derived from the provided
