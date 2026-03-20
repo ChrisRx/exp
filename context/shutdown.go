@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
-	"strings"
 	"sync"
 	"syscall"
 
@@ -31,6 +30,12 @@ type ShutdownContext interface {
 	// Wait blocks until the context is done. This is syntactic sugar for
 	// receiving from [ShutdownContext.Done].
 	Wait()
+}
+
+var defaultShutdownSignals = []os.Signal{
+	os.Interrupt,
+	syscall.SIGINT,
+	syscall.SIGTERM,
 }
 
 // Shutdown returns a new [ShutdownContext] using [context.Background] as the
@@ -128,60 +133,23 @@ func AddCleanup(ctx context.Context, fn func()) {
 	}
 }
 
-var defaultShutdownSignals = []os.Signal{
-	os.Interrupt,
-	syscall.SIGINT,
-	syscall.SIGTERM,
-}
-
-// context key for shutdown handlers
-var handlers = Key[*shutdownHandlers]()
-
-type shutdownHandlers struct {
-	ch              chan (os.Signal)
-	mu              sync.Mutex
-	handlers        []func()
-	cleanupHandlers []func()
-}
-
-// AddHandler adds a new handler function to a [ShutdownContext] to run when it
-// is marked done.
-func (s *shutdownHandlers) AddHandler(fn func()) {
-	s.mu.Lock()
-	s.handlers = append(s.handlers, fn)
-	s.mu.Unlock()
-}
-
-func (s *shutdownHandlers) next() (next func()) {
-	s.mu.Lock()
-	next, s.handlers = s.handlers[0], s.handlers[1:]
-	s.mu.Unlock()
-	return
-}
-
-func (s *shutdownHandlers) AddCleanup(fn func()) {
-	s.mu.Lock()
-	s.cleanupHandlers = append(s.cleanupHandlers, fn)
-	s.mu.Unlock()
-}
-
 type shutdownCtx struct {
 	context.Context
 }
-
-var _ context.Context = (*shutdownCtx)(nil)
 
 // AddHandler adds a new handler function to a [ShutdownContext] to run when it
 // is marked done.
 func (s *shutdownCtx) AddHandler(fn func()) {
 	handlers.ValueFunc(s.Context, func(sh *shutdownHandlers) {
-		sh.handlers = append(sh.handlers, fn)
+		sh.addHandler(fn)
 	})
 }
 
+// AddCleanup adds a new cleanup function to a [ShutdownContext] to run when it
+// is garbage collected.
 func (s *shutdownCtx) AddCleanup(fn func()) {
 	handlers.ValueFunc(s.Context, func(sh *shutdownHandlers) {
-		sh.cleanupHandlers = append(sh.cleanupHandlers, fn)
+		sh.addCleanup(fn)
 	})
 }
 
@@ -194,18 +162,33 @@ func (s *shutdownCtx) Wait() {
 	runtime.GC()
 }
 
-var (
-	lvl    = new(slog.LevelVar)
-	logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: lvl,
-	}))
-)
+// context key for shutdown handlers
+var handlers = Key[*shutdownHandlers]()
 
-func init() {
-	if v, ok := os.LookupEnv("EXP_LOG_LEVEL"); ok {
-		switch strings.ToLower(v) {
-		case "debug":
-			lvl.Set(slog.LevelDebug)
-		}
-	}
+type shutdownHandlers struct {
+	// for testing
+	ch chan (os.Signal)
+
+	mu              sync.Mutex
+	handlers        []func()
+	cleanupHandlers []func()
+}
+
+func (s *shutdownHandlers) addHandler(fn func()) {
+	s.mu.Lock()
+	s.handlers = append(s.handlers, fn)
+	s.mu.Unlock()
+}
+
+func (s *shutdownHandlers) addCleanup(fn func()) {
+	s.mu.Lock()
+	s.cleanupHandlers = append(s.cleanupHandlers, fn)
+	s.mu.Unlock()
+}
+
+func (s *shutdownHandlers) next() (next func()) {
+	s.mu.Lock()
+	next, s.handlers = s.handlers[0], s.handlers[1:]
+	s.mu.Unlock()
+	return
 }

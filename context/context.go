@@ -3,8 +3,9 @@ package context
 import (
 	"context"
 	"fmt"
-	"log/slog"
+	"os"
 
+	"go.chrisrx.dev/x/log/slog"
 	"go.chrisrx.dev/x/safe"
 )
 
@@ -14,7 +15,7 @@ import (
 type ContextKey[V any] interface {
 	Has(ctx context.Context) bool
 	Value(ctx context.Context) V
-	ValueFunc(ctx context.Context, fn func(V))
+	ValueFunc(ctx context.Context, fn func(V)) bool
 	WithValue(parent context.Context, value V) context.Context
 }
 
@@ -51,14 +52,17 @@ func (k *key[V]) Value(ctx context.Context) V {
 	return zero
 }
 
-func (k *key[V]) ValueFunc(ctx context.Context, fn func(V)) {
-	if v, ok := ctx.Value(k).(V); ok {
+// ValueFunc calls a function with the value stored in the provided
+// [context.Context]. It returns true when the value is set. If no value is
+// set, the function will not be called and this will return false.
+func (k *key[V]) ValueFunc(ctx context.Context, fn func(V)) bool {
+	v, ok := ctx.Value(k).(V)
+	if ok {
 		fn(v)
-	} else {
-		logger.Debug("context does not contain value",
-			slog.String("type", fmt.Sprintf("%T", *new(V))),
-		)
+		return true
 	}
+	logger.Debug("context does not contain value", slog.Stringf("type", "%T", *new(V)))
+	return false
 }
 
 // WithValue returns a new [context.Context] derived from the provided
@@ -70,3 +74,11 @@ func (k *key[V]) WithValue(parent context.Context, value V) context.Context {
 func (k *key[V]) String() string {
 	return fmt.Sprintf("context.Key[%T]", k)
 }
+
+var (
+	// internal debug logger
+	lvl    = new(slog.LevelVar)
+	logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: lvl,
+	}))
+)
