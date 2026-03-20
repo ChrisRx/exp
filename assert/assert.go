@@ -3,6 +3,7 @@ package assert
 
 import (
 	"cmp"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -31,6 +32,41 @@ func Equal[T any](tb testing.TB, expected, actual T, args ...any) {
 			Header: header("not equal", args),
 			Diff:   Diff(expected, actual),
 		})
+	}
+}
+
+func Eventually[T any](tb testing.TB, expected T, actual *T, timeout time.Duration, args ...any) {
+	tb.Helper()
+	EventuallyFunc(tb, expected, func() T {
+		return *actual
+	}, timeout, args...)
+}
+
+func EventuallyFunc[T any](tb testing.TB, expected T, fn func() T, timeout time.Duration, args ...any) {
+	tb.Helper()
+	ctx, cancel := context.WithTimeout(tb.Context(), timeout)
+	defer cancel()
+
+	diff := Diff(expected, fn())
+	if len(diff) == 0 {
+		return
+	}
+
+	interval := min(max(timeout, 100*time.Millisecond)/10, 1*time.Second)
+
+	for {
+		select {
+		case <-time.After(interval):
+			diff = Diff(expected, fn())
+			if len(diff) == 0 {
+				return
+			}
+		case <-ctx.Done():
+			Fatal(tb, Message{
+				Header: header("not equal", args),
+				Diff:   diff,
+			})
+		}
 	}
 }
 

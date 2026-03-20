@@ -40,7 +40,7 @@ func (p *printer) sprint(rv reflect.Value, depth int) string {
 		return "(invalid)(nil)"
 	}
 	switch rv.Kind() {
-	case reflect.Slice, reflect.Map, reflect.Chan, reflect.Ptr, reflect.Interface:
+	case reflect.Slice, reflect.Map, reflect.Chan, reflect.Pointer, reflect.Interface:
 		if rv.IsNil() {
 			return fmt.Sprintf("(%v)(nil)", replaceAnyType(rv.Type().String()))
 		}
@@ -114,8 +114,7 @@ func (p *printer) sprint(rv reflect.Value, depth int) string {
 		var maxFieldNameLen int
 		if rv.NumField() > 0 {
 			maxFieldNameLen = slices.Max(slices.Map(slices.N(rv.NumField()), func(i int) int {
-				name := rv.Type().Field(i).Name
-				return len(name)
+				return len(rv.Type().Field(i).Name)
 			}))
 		}
 		for i := range rv.NumField() {
