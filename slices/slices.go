@@ -37,6 +37,15 @@ func FilterMap2[T any, R any](col []T, fn func(elem T) (R, bool)) (result []R) {
 	return result
 }
 
+func Find[T any](col []T, fn func(elem T) bool) T {
+	for _, v := range col {
+		if fn(v) {
+			return v
+		}
+	}
+	return *new(T)
+}
+
 func FlatMap[T any, R any](col []T, fn func(elem T) []R) []R {
 	results := make([]R, 0)
 	for _, elem := range col {

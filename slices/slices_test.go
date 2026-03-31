@@ -24,6 +24,12 @@ func TestSlices(t *testing.T) {
 	t.Run("MapEntries", func(t *testing.T) {
 		assert.Equal(t, slices.MapEntries([]string{"a", "d", "c", "e", "b"}, func(s string) (string, string) {
 			return s, s
-		}), map[string]string{"a": "a", "d": "d", "c": "c", "e": "e", "b": "b"})
+		}), map[string]string{
+			"a": "a",
+			"d": "d",
+			"c": "c",
+			"e": "e",
+			"b": "b",
+		})
 	})
 }
