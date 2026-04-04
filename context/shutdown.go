@@ -108,9 +108,7 @@ func Shutdown(signals ...os.Signal) ShutdownContext {
 		logger.Debug("runtime cleanup called")
 		cancel()
 		signal.Stop(sh.ch)
-		for _, fn := range handlers.Value(ctx).cleanupHandlers {
-			fn()
-		}
+		handlers.Value(ctx).Close()
 	}, sh.ch)
 	return s
 }
@@ -159,7 +157,7 @@ func (s *shutdownCtx) String() string {
 
 func (s *shutdownCtx) Wait() {
 	<-s.Done()
-	runtime.GC()
+	handlers.Value(s.Context).Close()
 }
 
 // context key for shutdown handlers
@@ -190,5 +188,21 @@ func (s *shutdownHandlers) next() (next func()) {
 	s.mu.Lock()
 	next, s.handlers = s.handlers[0], s.handlers[1:]
 	s.mu.Unlock()
+	return
+}
+
+func (s *shutdownHandlers) Close() (next func()) {
+	if s == nil {
+		logger.Debug("close called on nil shutdown handlers")
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, fn := range s.cleanupHandlers {
+		if err := safe.Do(fn); err != nil {
+			slog.Error("cleanup handler panic", slog.Any("err", err))
+		}
+	}
+	s.cleanupHandlers = nil
 	return
 }

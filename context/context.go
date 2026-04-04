@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"go.chrisrx.dev/x/log/slog"
 	"go.chrisrx.dev/x/safe"
@@ -45,11 +46,13 @@ func (k *key[V]) Has(ctx context.Context) bool {
 // value is set, the zero value for the parameterized type for this key is
 // returned.
 func (k *key[V]) Value(ctx context.Context) V {
+	if ctx == nil {
+		return *new(V)
+	}
 	if v, ok := ctx.Value(k).(V); ok {
 		return v
 	}
-	var zero V
-	return zero
+	return *new(V)
 }
 
 // ValueFunc calls a function with the value stored in the provided
@@ -82,3 +85,12 @@ var (
 		Level: lvl,
 	}))
 )
+
+func init() {
+	if v, ok := os.LookupEnv("CONTEXT_LOG_LEVEL"); ok {
+		switch strings.ToLower(v) {
+		case "debug":
+			lvl.Set(slog.LevelDebug)
+		}
+	}
+}
