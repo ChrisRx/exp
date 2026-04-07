@@ -10,6 +10,7 @@ import (
 	"unsafe"
 
 	"go.chrisrx.dev/x/assert/internal/slices"
+	"go.chrisrx.dev/x/internal/reflectx"
 )
 
 func Sprint(v any) string {
@@ -100,6 +101,9 @@ func (p *printer) sprint(rv reflect.Value, depth int) string {
 		return rv.Type().String()
 	case reflect.Pointer:
 		if v, ok := p.ptrs.get(rv); ok {
+			if !rv.CanAddr() {
+				rv = reflectx.MakeAddressable(rv)
+			}
 			return fmt.Sprintf("(*%v)(%v)", replaceAnyType(v.Type().String()), rv.Addr())
 		}
 		p.ptrs.add(rv)
