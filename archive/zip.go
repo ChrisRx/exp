@@ -45,6 +45,7 @@ func UnzipFiles(ctx context.Context, r io.Reader, fn func(Reader) error, opts ..
 	if err != nil {
 		return err
 	}
+	defer reader.Close()
 	if !IsZipFile(reader) {
 		return fmt.Errorf("not a zip file")
 	}
@@ -96,7 +97,7 @@ func UnzipFiles(ctx context.Context, r io.Reader, fn func(Reader) error, opts ..
 			})
 		})
 	}
-	return g.MustWait()
+	return g.Wait()
 }
 
 func UnzipJSON[T any](ctx context.Context, r io.Reader, opts ...Option) iter.Seq2[T, error] {

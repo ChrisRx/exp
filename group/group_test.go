@@ -123,4 +123,28 @@ func TestGroup(t *testing.T) {
 		}
 		assert.Equal(t, n, int(done.Load()))
 	})
+
+	t.Run("WaitN", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		g := group.New(ctx)
+		go func() {
+			for range 10 {
+				g.Go(func(ctx context.Context) error {
+					time.Sleep(100 * time.Millisecond)
+					return nil
+				})
+			}
+		}()
+		assert.NoError(t, g.WaitN(10))
+		go func() {
+			for range 9 {
+				g.Go(func(ctx context.Context) error {
+					time.Sleep(100 * time.Millisecond)
+					return nil
+				})
+			}
+		}()
+		assert.NoError(t, g.WaitN(9))
+	})
 }

@@ -3,7 +3,10 @@ package group
 
 import (
 	"context"
+	"sync/atomic"
+	"time"
 
+	"go.chrisrx.dev/x/run"
 	"go.chrisrx.dev/x/sync"
 )
 
@@ -17,6 +20,8 @@ type Group struct {
 	wg    sync.WaitGroup
 	done  sync.Chan[error]
 	ready sync.Waiter
+
+	called atomic.Uint64
 
 	once sync.Once
 	err  error
@@ -43,15 +48,23 @@ func New(ctx context.Context, opts ...GroupOption) *Group {
 // goroutine returns.
 func (g *Group) Go(fn func(context.Context) error) *Group {
 	g.wg.Add(1)
+	g.called.Add(1)
+	g.ready.Done()
 	go func() {
 		g.limit.Acquire(1)
 		defer g.limit.Release()
 		defer g.wg.Done()
-		defer g.ready.Done()
 
 		// If the context was canceled while waiting to acquire, we shouldn't
 		// attempt to run the user-provided function.
 		if g.ctx.Err() != nil {
+			return
+		}
+
+		// The group has encountered an error so user-provided functions shouldn't
+		// continue to be executed. This ensures that producers don't needlessly
+		// continue performing work when the group has already failed.
+		if g.err != nil {
 			return
 		}
 
@@ -65,23 +78,30 @@ func (g *Group) Go(fn func(context.Context) error) *Group {
 	return g
 }
 
+// MustWait blocks until at least n goroutines in this group have returned. If any
+// errors occur, the first error encountered will be returned.
+//
+// MustWait will block until at least one goroutine is scheduled. This is helpful
+// to ensure that if Wait is called before calls scheduling goroutines, it
+// won't finish waiting prematurely. If there is a possibility that no
+// goroutines might be scheduled, then [Wait] should be called instead.
+func (g *Group) WaitN(n int) (reterr error) {
+	defer g.cancel(reterr)
+	defer g.reset()
+	return run.Until(g.ctx, func() (bool, error) {
+		g.wg.Wait()
+		return g.called.Load() >= uint64(n), g.err
+	}, run.RetryOptions{
+		InitialInterval: 10 * time.Millisecond,
+		MaxAttempts:     100,
+	})
+}
+
 // Wait blocks until all the goroutines in this group have returned. If any
 // errors occur, the first error encountered will be returned.
 //
-// Wait will block until at least one goroutine is scheduled. This is helpful
-// to ensure that if Wait is called before calls scheduling goroutines, it
-// won't finish waiting prematurely. If there is a possibility that no
-// goroutines might be scheduled, then [TryWait] should be called instead.
+// Unlike [MustWait], if no goroutines are scheduled, this returns immediately.
 func (g *Group) Wait() error {
-	g.ready.Wait()
-	return g.TryWait()
-}
-
-// TryWait blocks until all the goroutines in this group have returned. If any
-// errors occur, the first error encountered will be returned.
-//
-// Unlike [Wait], if no goroutines are scheduled, this returns immediately.
-func (g *Group) TryWait() error {
 	defer g.reset()
 	g.wg.Wait()
 	g.cancel(g.err)
@@ -108,4 +128,5 @@ func (g *Group) reset() {
 	g.ctx, g.cancel = context.WithCancelCause(g.parent)
 	g.once.Reset()
 	g.ready.Reset()
+	g.called.Store(0)
 }

@@ -11,7 +11,7 @@ import (
 
 // ResultGroup manages a pool of goroutines that return a result value.
 type ResultGroup[T any] struct {
-	g       *Group
+	g, r    *Group
 	results sync.Chan[future.Value[T]]
 }
 
@@ -20,6 +20,7 @@ func NewResultGroup[T any](ctx context.Context, opts ...GroupOption) *ResultGrou
 	o := newOptions().Apply(opts)
 	r := &ResultGroup[T]{
 		g:       New(ctx, opts...),
+		r:       New(ctx, opts...),
 		results: ptr.From(sync.NewChan[future.Value[T]](o.ResultsBuffer)),
 	}
 	return r
@@ -39,17 +40,15 @@ func (r *ResultGroup[T]) Go(fn func(context.Context) (T, error)) future.Value[T]
 		return fn(r.g.ctx)
 	})
 	r.g.Go(func(ctx context.Context) error {
-		_, err := v.Get()
-
-		// The results queue might not ever be read from so anything past the
-		// channel buffer should just be dropped. This will be typical in cases
-		// where the returned future is handled manually (i.e. instead of using
-		// [ResultGroup.Get]).
+		return v.Err()
+	})
+	r.r.Go(func(ctx context.Context) error {
 		select {
-		case r.results.Load() <- v:
-		default:
+		case <-v.Done():
+			r.results.Send(v)
+		case <-r.r.ctx.Done():
 		}
-		return err
+		return nil
 	})
 	return v
 }
@@ -59,11 +58,8 @@ func (r *ResultGroup[T]) Go(fn func(context.Context) (T, error)) future.Value[T]
 func (r *ResultGroup[T]) Get() iter.Seq2[T, error] {
 	go func() {
 		defer r.results.Reset()
-
-		select {
-		case <-r.g.Done():
-		case <-r.g.ctx.Done():
-		}
+		r.g.Wait()
+		r.r.Wait()
 	}()
 
 	return func(yield func(T, error) bool) {
@@ -86,7 +82,6 @@ func (r *ResultGroup[T]) Collect() ([]T, error) {
 		results = append(results, v)
 	}
 	return results, nil
-
 }
 
 // Wait blocks until all the goroutines in this group have returned. If any

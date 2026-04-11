@@ -46,6 +46,7 @@ func UntarFiles(ctx context.Context, r io.Reader, fn func(Reader) error, opts ..
 	if err != nil {
 		return err
 	}
+	defer reader.Close()
 	if !IsTarFile(reader) {
 		return fmt.Errorf("not a tar file")
 	}
