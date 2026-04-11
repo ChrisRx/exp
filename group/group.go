@@ -91,7 +91,7 @@ func (g *Group) WaitN(n int) (reterr error) {
 	return run.Until(g.ctx, func() (bool, error) {
 		g.wg.Wait()
 		return g.called.Load() >= uint64(n), g.err
-	}, run.RetryOptions{
+	}, run.Options{
 		InitialInterval: 10 * time.Millisecond,
 		MaxAttempts:     100,
 	})
