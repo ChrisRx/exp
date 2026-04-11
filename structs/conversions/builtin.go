@@ -17,6 +17,7 @@ func init() {
 		o := convert.NewOptions(opts)
 		return time.Parse(o.Layout, s)
 	})
+
 	convert.Register(func(t time.Time, opts ...convert.Option) (string, error) {
 		o := convert.NewOptions(opts)
 		return t.Format(o.Layout), nil

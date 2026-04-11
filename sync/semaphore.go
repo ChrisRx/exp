@@ -23,7 +23,7 @@ func (s *Semaphore) SetLimit(n int) {
 // The weight provided cannot be greater than the semaphore capacity. If it is,
 // the semaphore capacity is used instead.
 func (s *Semaphore) Acquire(n int) {
-	s.ch.Send(make([]empty, min(s.ch.Cap(), n))...)
+	s.ch.Send(make([]empty, min(s.ch.Cap(), max(n, 0)))...)
 }
 
 // TryAcquire attempts to acquire a semaphore of weight n. It returns
@@ -33,7 +33,7 @@ func (s *Semaphore) Acquire(n int) {
 // The weight provided cannot be greater than the semaphore capacity. If it is,
 // the semaphore capacity is used instead.
 func (s *Semaphore) TryAcquire(n int) bool {
-	for range min(s.ch.Cap(), n) {
+	for range min(s.ch.Cap(), max(n, 0)) {
 		select {
 		case s.ch.Load() <- empty{}:
 		default:

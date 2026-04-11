@@ -40,4 +40,9 @@ func TestSemaphore(t *testing.T) {
 		sema := NewSemaphore(5)
 		sema.Acquire(6)
 	})
+
+	t.Run("acquire negative", func(t *testing.T) {
+		sema := NewSemaphore(5)
+		sema.Acquire(-1)
+	})
 }
