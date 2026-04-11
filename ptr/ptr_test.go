@@ -49,6 +49,11 @@ func TestIsZero(t *testing.T) {
 			input:    func() {},
 			expected: false,
 		},
+		{
+			name:     "nil pointer",
+			input:    (*string)(nil),
+			expected: true,
+		},
 	}
 	for _, tt := range cases {
 		result := ptr.IsZero(tt.input)

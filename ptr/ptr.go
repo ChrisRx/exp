@@ -62,5 +62,9 @@ func IsZero[T any](v T) bool {
 	if !rv.IsValid() {
 		return true
 	}
-	return reflect.Indirect(rv).IsZero()
+	rv = reflect.Indirect(rv)
+	if !rv.IsValid() {
+		return true
+	}
+	return rv.IsZero()
 }
