@@ -10,6 +10,11 @@ import (
 )
 
 func TestPrinter(t *testing.T) {
+	t.Run("empty map", func(t *testing.T) {
+		Equal(t, "(map[string]string)(nil)", Sprint(*new(map[string]string)))
+		Equal(t, "map[string]string{}", Sprint(make(map[string]string)))
+	})
+
 	type Nested struct {
 		String string
 		T      time.Time

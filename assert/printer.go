@@ -74,6 +74,9 @@ func (p *printer) sprint(rv reflect.Value, depth int) string {
 		return replaceAnyType(fmt.Sprintf(`"%v"`, rv.Interface()))
 	case reflect.Map:
 		keys := rv.MapKeys()
+		if len(keys) == 0 {
+			return fmt.Sprintf("%s{}", replaceAnyType(rv.Type().String()))
+		}
 		maxKeyLen := slices.Max(slices.Map(keys, func(key reflect.Value) int {
 			return len(key.String())
 		}))
