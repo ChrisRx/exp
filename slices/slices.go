@@ -4,6 +4,8 @@ package slices
 
 import (
 	"cmp"
+	"fmt"
+	"hash/maphash"
 	"slices"
 
 	"go.chrisrx.dev/x/constraints"
@@ -125,4 +127,23 @@ func Reverse[S ~[]E, E any](s S) S {
 func Sort[S ~[]E, E cmp.Ordered](x S) S {
 	slices.Sort(x)
 	return x
+}
+
+// Uniq returns only the unique elements of a slice.
+func Uniq[S ~[]E, E any](s S) S {
+	var h maphash.Hash
+	hash := func(v any) uint64 {
+		h.Reset()
+		_, _ = fmt.Fprint(&h, v)
+		return h.Sum64()
+	}
+	m := make(map[uint64]struct{})
+	return slices.DeleteFunc(s, func(elem E) bool {
+		n := hash(elem)
+		if _, ok := m[n]; ok {
+			return true
+		}
+		m[n] = struct{}{}
+		return false
+	})
 }

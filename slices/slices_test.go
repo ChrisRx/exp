@@ -32,4 +32,7 @@ func TestSlices(t *testing.T) {
 			"b": "b",
 		})
 	})
+	t.Run("Uniq", func(t *testing.T) {
+		assert.Equal(t, []string{"a", "b"}, slices.Uniq([]string{"a", "a", "b", "b", "b"}))
+	})
 }
