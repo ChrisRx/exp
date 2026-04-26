@@ -45,5 +45,9 @@ func Concat[S ~[]E, E any](s ...S) S {
 }
 
 func Max[S ~[]E, E cmp.Ordered](x S) E {
+	if len(x) == 0 {
+		var zero E
+		return zero
+	}
 	return slices.Max(x)
 }

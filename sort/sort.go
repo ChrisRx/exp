@@ -42,6 +42,17 @@ func (m SortMap[K, V]) Limit(n int) iter.Seq2[K, V] {
 	}
 }
 
+func MapValues[K comparable, V cmp.Ordered](m map[K]V) SortMap[K, V] {
+	sm := make(SortMap[K, V], len(m))
+	i := 0
+	for k, v := range m {
+		sm[i] = Entry[K, V]{k, v}
+		i++
+	}
+	sort.Sort(sm)
+	return sm
+}
+
 func Map[K comparable, V cmp.Ordered](m map[K]V) SortMap[K, V] {
 	sm := make(SortMap[K, V], len(m))
 	i := 0

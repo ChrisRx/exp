@@ -43,10 +43,13 @@ func (p *printer) sprint(rv reflect.Value, depth int) string {
 	switch rv.Kind() {
 	case reflect.Slice, reflect.Map, reflect.Chan, reflect.Pointer, reflect.Interface:
 		if rv.IsNil() {
-			return fmt.Sprintf("(%v)(nil)", replaceAnyType(rv.Type().String()))
+			typ := replaceAnyType(rv.Type().String())
+			typ = strings.ReplaceAll(typ, "[]uint8", "[]byte")
+			return fmt.Sprintf("(%v)(nil)", typ)
 		}
 	}
 
+	// well-known
 	switch rv.Kind() {
 	case reflect.Int64:
 		if isDuration(rv) {
@@ -105,12 +108,16 @@ func (p *printer) sprint(rv reflect.Value, depth int) string {
 	case reflect.Pointer:
 		if v, ok := p.ptrs.get(rv); ok {
 			if !rv.CanAddr() {
-				rv = reflectx.MakeAddressable(rv)
+				switch rv.Kind() {
+				case reflect.Chan, reflect.Func, reflect.Map, reflect.Pointer, reflect.Slice, reflect.String, reflect.UnsafePointer:
+					return fmt.Sprintf("(*%v)(%v)", replaceAnyType(v.Type().String()), rv.UnsafePointer())
+				default:
+					return fmt.Sprintf("(*%v)(<unknown>)", replaceAnyType(v.Type().String()))
+				}
 			}
 			return fmt.Sprintf("(*%v)(%v)", replaceAnyType(v.Type().String()), rv.Addr())
 		}
 		p.ptrs.add(rv)
-		defer p.ptrs.remove(rv)
 		return "*" + p.sprint(rv.Elem(), depth)
 	case reflect.Func:
 		return rv.Type().String()
@@ -131,7 +138,7 @@ func (p *printer) sprint(rv reflect.Value, depth int) string {
 				fv = reflect.NewAt(fv.Type(), unsafe.Pointer(fv.UnsafeAddr())).Elem()
 			}
 			if !fv.CanAddr() {
-				fv = makeAddressableField(rv, i)
+				fv = reflectx.MakeAddressableField(rv, i)
 			}
 			sb.WriteString(p.getIndent(depth + 1))
 			sb.WriteString(ft.Name)
@@ -144,9 +151,12 @@ func (p *printer) sprint(rv reflect.Value, depth int) string {
 		sb.WriteString("}")
 		return sb.String()
 	case reflect.Array, reflect.Slice:
+		if rv.Type().Elem().Kind() == reflect.Uint8 {
+			return fmt.Sprintf("[]byte(%q)\n", rv.Bytes())
+		}
 		var sb strings.Builder
 		sb.WriteString(p.getIndent(depth))
-		sb.WriteString(fmt.Sprintf("[]%s{\n", rv.Type().String()))
+		sb.WriteString(fmt.Sprintf("%s{\n", rv.Type().String()))
 		for i := range rv.Len() {
 			sb.WriteString(p.getIndent(depth + 1))
 			sb.WriteString(p.sprint(rv.Index(i), depth+1))
@@ -174,21 +184,10 @@ func (p *ptrset) add(v reflect.Value) {
 }
 
 func (p *ptrset) get(v reflect.Value) (reflect.Value, bool) {
-	v, ok := p.m[unsafe.Pointer(v.Pointer())]
-	return v, ok
-}
-
-func (p *ptrset) remove(v reflect.Value) {
-	delete(p.m, unsafe.Pointer(v.Pointer()))
+	ptr, ok := p.m[unsafe.Pointer(v.Pointer())]
+	return ptr, ok
 }
 
 func replaceAnyType(s string) string {
 	return strings.ReplaceAll(s, "interface {}", "any")
-}
-
-func makeAddressableField(rv reflect.Value, fieldNum int) reflect.Value {
-	rv2 := reflect.New(rv.Type()).Elem()
-	rv2.Set(rv)
-	fv := rv2.Field(fieldNum)
-	return reflect.NewAt(fv.Type(), unsafe.Pointer(fv.UnsafeAddr())).Elem()
 }

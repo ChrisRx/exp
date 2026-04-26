@@ -78,6 +78,11 @@ func (g *Group) Go(fn func(context.Context) error) *Group {
 	return g
 }
 
+// Err returns the last error encountered.
+func (g *Group) Err() error {
+	return g.err
+}
+
 // MustWait blocks until at least n goroutines in this group have returned. If any
 // errors occur, the first error encountered will be returned.
 //
@@ -108,6 +113,13 @@ func (g *Group) Wait() error {
 	return g.err
 }
 
+func (g *Group) reset() {
+	g.ctx, g.cancel = context.WithCancelCause(g.parent)
+	g.once.Reset()
+	g.ready.Reset()
+	g.called.Store(0)
+}
+
 // Done blocks until all the goroutines in this group have returned. If any
 // errors occur, the first error encountered is sent on the returned channel,
 // otherwise the channel is closed.
@@ -122,11 +134,4 @@ func (g *Group) Done() <-chan error {
 		}()
 	}
 	return done
-}
-
-func (g *Group) reset() {
-	g.ctx, g.cancel = context.WithCancelCause(g.parent)
-	g.once.Reset()
-	g.ready.Reset()
-	g.called.Store(0)
 }

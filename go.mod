@@ -1,8 +1,10 @@
 module go.chrisrx.dev/x
 
-go 1.26.0
+go 1.26
 
 tool go.chrisrx.dev/tools/cmd/aliaspkg
+
+require google.golang.org/protobuf v1.36.11
 
 require (
 	go.chrisrx.dev/tools v0.0.0-20250913134956-b84665ba111b // indirect

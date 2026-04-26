@@ -15,6 +15,8 @@ type T struct {
 
 func NoFatal(t *testing.T) *T { return &T{T: t} }
 
+func (t *T) Error(args ...any)                 { t.Helper(); t.Log(args...) }
+func (t *T) Errorf(format string, args ...any) { t.Helper(); t.Logf(format, args...) }
 func (t *T) Fatal(args ...any)                 { t.Helper(); t.Log(args...) }
 func (t *T) Fatalf(format string, args ...any) { t.Helper(); t.Logf(format, args...) }
 

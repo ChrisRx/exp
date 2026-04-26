@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"iter"
 	"maps"
+	"slices"
 
-	"go.chrisrx.dev/x/slices"
 	"go.chrisrx.dev/x/sync"
 )
 

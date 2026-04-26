@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"unsafe"
 )
 
 func IndirectType(rt reflect.Type) reflect.Type {
@@ -64,6 +65,13 @@ func MakeAddressable(v reflect.Value) reflect.Value {
 	rv := reflect.New(v.Type())
 	rv.Elem().Set(v)
 	return rv
+}
+
+func MakeAddressableField(rv reflect.Value, fieldNum int) reflect.Value {
+	rv2 := reflect.New(rv.Type()).Elem()
+	rv2.Set(rv)
+	fv := rv2.Field(fieldNum)
+	return reflect.NewAt(fv.Type(), unsafe.Pointer(fv.UnsafeAddr())).Elem()
 }
 
 var ErrInvalidType = errors.New("invalid type for conversion func")

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
-	"testing"
 	"text/template"
 )
 
@@ -16,13 +15,12 @@ type Message struct {
 	Diff     []byte
 }
 
-func Fatal(tb testing.TB, msg Message) {
+func Format(msg Message) string {
 	var b bytes.Buffer
 	if err := failureMessage.Execute(&b, msg); err != nil {
 		panic(err)
 	}
-	tb.Helper()
-	tb.Fatal(b.String())
+	return b.String()
 }
 
 var failureMessage = template.Must(template.New("").Funcs(map[string]any{

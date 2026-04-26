@@ -28,10 +28,10 @@ func Ok[T any](tb testing.TB, v T, err error) T {
 func Equal[T any](tb testing.TB, expected, actual T, args ...any) {
 	if diff := Diff(expected, actual); len(diff) > 0 {
 		tb.Helper()
-		Fatal(tb, Message{
+		tb.Error(Format(Message{
 			Header: header("not equal", args),
 			Diff:   Diff(expected, actual),
-		})
+		}))
 	}
 }
 
@@ -62,10 +62,10 @@ func EventuallyFunc[T any](tb testing.TB, expected T, fn func() T, timeout time.
 				return
 			}
 		case <-ctx.Done():
-			Fatal(tb, Message{
+			tb.Error(Format(Message{
 				Header: header("not equal", args),
 				Diff:   diff,
-			})
+			}))
 		}
 	}
 }
@@ -79,20 +79,20 @@ func Panic(tb testing.TB, expected any, fn func(), args ...any) {
 
 	if !isZero(expected) && r == nil {
 		tb.Helper()
-		Fatal(tb, Message{
+		tb.Error(Format(Message{
 			Header:   header("expected panic", args),
 			Expected: expected,
-		})
+		}))
 	}
 
 	if diff := Diff(expected, r); len(diff) > 0 {
 		tb.Helper()
-		Fatal(tb, Message{
+		tb.Error(Format(Message{
 			Header:   header("unexpected panic", args),
 			Diff:     diff,
 			Expected: cmp.Or(expected, "<nil>"),
 			Actual:   r,
-		})
+		}))
 	}
 }
 
@@ -108,20 +108,20 @@ func Error(tb testing.TB, expected any, actual error, args ...any) bool {
 		}
 
 		tb.Helper()
-		Fatal(tb, Message{
+		tb.Error(Format(Message{
 			Header:   header("unexpected error", args),
 			Expected: expected,
 			Actual:   actual,
-		})
+		}))
 		return false
 	}
 	if actual == nil {
 		tb.Helper()
-		Fatal(tb, Message{
+		tb.Error(Format(Message{
 			Header:   header("expected error", args),
 			Expected: expected,
 			Actual:   "(nil)",
-		})
+		}))
 		return false
 	}
 
@@ -132,13 +132,13 @@ func Error(tb testing.TB, expected any, actual error, args ...any) bool {
 		}
 
 		tb.Helper()
-		Fatal(tb, Message{
+		tb.Error(Format(Message{
 			Header: header("unexpected error", args),
 			Expected: strings.Join(slices.Map(unwrap(expected), func(elem error) string {
 				return elem.Error()
 			}), "\n"),
 			Actual: actual,
-		})
+		}))
 		return false
 	case string:
 		fn, err := newMatcherFunc(expected)
@@ -151,11 +151,11 @@ func Error(tb testing.TB, expected any, actual error, args ...any) bool {
 		if fn(actual.Error()) {
 			return true
 		}
-		Fatal(tb, Message{
+		tb.Error(Format(Message{
 			Header:   header("unexpected error", args),
 			Expected: expected,
 			Actual:   actual,
-		})
+		}))
 		return false
 	default:
 		tb.Fatalf("received invalid type: %T", expected)
@@ -185,7 +185,7 @@ func ElementsMatch[T any](tb testing.TB, expected, actual []T, args ...any) bool
 	}
 
 	tb.Helper()
-	Fatal(tb, Message{
+	tb.Error(Format(Message{
 		Header: header("elements do not match", args),
 		Elements: slices.Concat(
 			slices.Map(missing, func(elem T) any {
@@ -195,7 +195,7 @@ func ElementsMatch[T any](tb testing.TB, expected, actual []T, args ...any) bool
 				return fmt.Sprintf("+ (%[1]T)(%[1]v)", elem)
 			}),
 		),
-	})
+	}))
 	return false
 }
 
@@ -209,11 +209,11 @@ func Between(tb testing.TB, start, end, actual any, args ...any) {
 	}
 
 	tb.Helper()
-	Fatal(tb, Message{
+	tb.Error(Format(Message{
 		Header:   header("not between", args),
 		Expected: fmt.Sprintf("%s <-> %v", format(start), format(end)),
 		Actual:   format(actual),
-	})
+	}))
 }
 
 func WithinDuration(tb testing.TB, expected, actual time.Time, delta time.Duration, args ...any) {
@@ -222,11 +222,11 @@ func WithinDuration(tb testing.TB, expected, actual time.Time, delta time.Durati
 	}
 
 	tb.Helper()
-	Fatal(tb, Message{
+	tb.Error(Format(Message{
 		Header:   header("not within expected delta", args),
 		Expected: fmt.Sprintf("%v ±%v", format(expected), delta),
 		Actual:   fmt.Sprintf("%v %v", format(actual), format(actual.Sub(expected))),
-	})
+	}))
 }
 
 func WithEnviron(tb testing.TB, environ map[string]string, fn func()) {

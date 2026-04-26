@@ -16,7 +16,7 @@ func ExampleSortMap() {
 		"E": 3,
 		"F": 2,
 	}
-	for k, v := range slices.Reverse(sort.Map(m)).Limit(5) {
+	for k, v := range slices.Reverse(sort.MapValues(m)).Limit(5) {
 		fmt.Printf("%v: %v\n", k, v)
 	}
 	// Output: B: 6
