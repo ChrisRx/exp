@@ -51,7 +51,12 @@ func TryDefaults(v any) error {
 	if rv.Kind() != reflect.Pointer {
 		return fmt.Errorf("must provide a struct pointer, received %T", v)
 	}
-	rv = reflect.Indirect(rv)
+	for rv.Kind() == reflect.Pointer {
+		if rv.IsZero() {
+			rv.Set(reflect.New(rv.Type().Elem()))
+		}
+		rv = reflect.Indirect(rv)
+	}
 	if rv.Kind() != reflect.Struct {
 		return fmt.Errorf("must provide a struct pointer, received %T", v)
 	}
