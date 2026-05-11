@@ -1,6 +1,8 @@
 package page
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"go.chrisrx.dev/x/must"
@@ -28,6 +30,18 @@ func (t Cursor[T]) TryEncode(opts ...Option) (string, error) {
 		Token:   t,
 		Version: TokenMetaVersion,
 	}.Encode(opts...)
+}
+
+func (t Cursor[T]) String() string {
+	var sb strings.Builder
+	sb.WriteString("Cursor[")
+	sb.WriteString(fmt.Sprintf("%+v", t.After))
+	if !t.ReadTimestamp.IsZero() {
+		sb.WriteString(" read=")
+		sb.WriteString(t.ReadTimestamp.Format(time.DateTime))
+	}
+	sb.WriteString("]")
+	return sb.String()
 }
 
 type OrderBy struct {

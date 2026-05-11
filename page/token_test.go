@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.chrisrx.dev/x/assert"
+	"go.chrisrx.dev/x/must"
 	"go.chrisrx.dev/x/page"
 )
 
@@ -69,8 +70,18 @@ func TestToken(t *testing.T) {
 		parsed, err := page.ParseToken[page.Cursor[int]](s, page.Signed(key))
 		assert.NoError(t, err)
 		assert.Equal(t, token, parsed)
-		parsed, err = page.ParseToken[page.Cursor[int]](s, page.Signed([]byte("wrong key")))
+		parsed, err = page.ParseToken[page.Cursor[int]](s, page.Signed("wrong key"))
 		assert.Error(t, "signature mismatch", err)
+	})
+
+	t.Run("wrong type parameter", func(t *testing.T) {
+		assert.Error(t,
+			"gob: unknown type id or corrupted data",
+			must.Get1(page.ParseToken[page.Offset](page.Cursor[int]{
+				ReadTimestamp: must.Ok(time.Parse(time.DateTime, "2020-01-01 10:20:30")),
+				After:         123,
+			}.Encode())),
+		)
 	})
 }
 

@@ -8,20 +8,21 @@ import (
 
 	"go.chrisrx.dev/x/convert"
 	"go.chrisrx.dev/x/internal/gobx"
+	"go.chrisrx.dev/x/options"
 	"go.chrisrx.dev/x/structs"
 )
 
-type options struct {
+type Signed []byte
+
+func (s Signed) Apply(o *TokenOptions) {
+	o.key = s
+}
+
+type TokenOptions struct {
 	key []byte
 }
 
-type Option func(*options)
-
-func Signed(key []byte) Option {
-	return func(o *options) {
-		o.key = key
-	}
-}
+type Option = options.Option[*TokenOptions]
 
 type Token interface {
 	isToken()
@@ -38,8 +39,13 @@ func ParseToken[T Token](s string, opts ...Option) (T, error) {
 		return NewToken[T](), nil
 	}
 	var token tokenMeta[T]
-	if err := token.Decode(s, opts...); err != nil {
+	if err := token.Decode(s); err != nil {
 		return *new(T), err
+	}
+	if o := options.New(opts); len(o.key) > 0 && len(token.Signature) > 0 {
+		if err := token.Verify(o.key); err != nil {
+			return *new(T), err
+		}
 	}
 	return token.Token, nil
 }
@@ -65,12 +71,8 @@ func (t tokenMeta[T]) registerCodec() {
 	}
 }
 
-func (t *tokenMeta[T]) Decode(s string, opts ...Option) error {
+func (t *tokenMeta[T]) Decode(s string) error {
 	t.registerCodec()
-	o := &options{}
-	for _, opt := range opts {
-		opt(o)
-	}
 	data, err := base64.StdEncoding.DecodeString(s)
 	if err != nil {
 		return err
@@ -79,26 +81,21 @@ func (t *tokenMeta[T]) Decode(s string, opts ...Option) error {
 	if err != nil {
 		return err
 	}
-	if len(o.key) > 0 && len(token.Signature) > 0 {
-		if err := token.Verify(o.key); err != nil {
-			return err
-		}
-	}
 	*t = token
 	return nil
 }
 
 func (t tokenMeta[T]) Encode(opts ...Option) (string, error) {
 	t.registerCodec()
-	o := &options{}
-	for _, opt := range opts {
-		opt(o)
-	}
-	if len(o.key) > 0 {
+	if o := options.New(opts); len(o.key) > 0 {
 		if err := t.Sign(o.key); err != nil {
 			return "", err
 		}
 	}
+	return t.encode()
+}
+
+func (t tokenMeta[T]) encode() (string, error) {
 	data, err := convert.Into[[]byte](t)
 	if err != nil {
 		return "", err
