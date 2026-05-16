@@ -35,6 +35,11 @@ func New[T any](elems ...T) *Set[T] {
 	return s
 }
 
+// Of constructs a new set from the provided slice.
+func Of[T any](elems []T) *Set[T] {
+	return New(elems...)
+}
+
 func (set *Set[T]) init() {
 	set.once.Do(func() {
 		set.m = make(map[uint64]T)
