@@ -147,3 +147,14 @@ func Uniq[S ~[]E, E any](s S) S {
 		return false
 	})
 }
+
+// Or returns the first slice containing 1 or more elements.
+func Or[S ~[]E, E any](slices ...S) S {
+	var zero S
+	for _, slice := range slices {
+		if len(slice) > 0 {
+			return slice
+		}
+	}
+	return zero
+}

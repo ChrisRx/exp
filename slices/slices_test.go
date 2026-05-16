@@ -35,4 +35,8 @@ func TestSlices(t *testing.T) {
 	t.Run("Uniq", func(t *testing.T) {
 		assert.Equal(t, []string{"a", "b"}, slices.Uniq([]string{"a", "a", "b", "b", "b"}))
 	})
+
+	t.Run("Or", func(t *testing.T) {
+		assert.Equal(t, []string{"a", "b", "c"}, slices.Or(nil, []string{}, []string{"a", "b", "c"}, []string{"d", "e", "f"}))
+	})
 }
