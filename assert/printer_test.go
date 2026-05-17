@@ -3,8 +3,10 @@ package assert_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"go.chrisrx.dev/x/assert"
 	"go.chrisrx.dev/x/assert/internal/diff"
@@ -39,7 +41,7 @@ func TestPrinter(t *testing.T) {
 	})
 
 	t.Run("print", func(t *testing.T) {
-		t.Skip()
+		// t.Skip()
 		type Nested struct {
 			String string
 			T      time.Time
@@ -116,5 +118,98 @@ func TestPrinter(t *testing.T) {
 			d := diff.Diff([]byte(assert.Sprint(s)), []byte(assert.Sprint(s2)))
 			fmt.Printf("%s\n", d)
 		})
+	})
+}
+
+func TestPrintTypes(t *testing.T) {
+	cases := []struct {
+		name  string
+		value any
+	}{
+		{
+			name:  "chan",
+			value: make(chan error),
+		},
+		{
+			name:  "chan",
+			value: (chan error)(nil),
+		},
+		{
+			name:  "uintptr",
+			value: (uintptr)(0x12f25ac9a230),
+		},
+		{
+			name:  "unsafe.Pointer",
+			value: unsafe.Pointer(uintptr(0x12f25ac9a230)),
+		},
+		{
+			name:  "any",
+			value: (any)("something"),
+		},
+		{
+			name: "struct",
+			value: struct {
+				v          any
+				unexported int
+				Exported   string
+			}{
+				v:          "value",
+				unexported: 5,
+				Exported:   "exported",
+			},
+		},
+		{
+			name:  "bytes",
+			value: []byte("byte value"),
+		},
+		{
+			name:  "time.Duration",
+			value: 15 * time.Second,
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Print(tt.value)
+		})
+	}
+}
+
+func TestDo(t *testing.T) {
+	a := map[string]any{}
+	a["circular"] = map[string]any{
+		"a": a,
+	}
+	b := map[string]any{
+		"a": a,
+		"b": a,
+	}
+	assert.Print(b)
+
+	t.Run("slice", func(t *testing.T) {
+		s := "test"
+		a := []any{&s}
+		a = append(a, a)
+		a = append(a, a)
+		b := map[string]any{
+			"a": a,
+			"b": a,
+		}
+		assert.Print(b)
+	})
+
+	t.Run("proto skip", func(t *testing.T) {
+		msg := &test3.TestAllTypes_NestedMessage{
+			A: 123,
+			Corecursive: &test3.TestAllTypes{
+				SingularInt32: 1,
+				OptionalInt64: new(int64(1)),
+				SingularBytes: []byte("test\x00\x0a"),
+			},
+		}
+		assert.Equal(t,
+			false,
+			strings.Contains(assert.Sprint(msg), "impl.MessageState{"),
+		)
 	})
 }
