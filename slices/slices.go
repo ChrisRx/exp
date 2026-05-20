@@ -158,3 +158,8 @@ func Or[S ~[]E, E any](slices ...S) S {
 	}
 	return zero
 }
+
+// Truncate returns a new slice truncated to the provided upper index value.
+func Truncate[S ~[]E, E any](s S, upper int) S {
+	return s[:min(len(s)-1, upper)]
+}
