@@ -9,21 +9,25 @@ import (
 	"go.chrisrx.dev/x/pagetoken"
 )
 
+type KeySet struct {
+	ID        int
+	CreatedAt time.Time
+}
+
+type Token = pagetoken.Cursor[KeySet]
+
 func TestToken(t *testing.T) {
 	t.Run("cursor", func(t *testing.T) {
 		now := time.Now()
 
-		token := pagetoken.Cursor[struct {
-			ID        int
-			CreatedAt time.Time
-		}]{}
-		token.After.ID = 123
-		token.After.CreatedAt = now
+		token := Token{
+			After: KeySet{
+				ID:        123,
+				CreatedAt: now,
+			},
+		}
 
-		parsed, err := pagetoken.ParseCursor[struct {
-			ID        int
-			CreatedAt time.Time
-		}](token.Encode())
+		parsed, err := pagetoken.ParseCursor[KeySet](token.Encode())
 		assert.NoError(t, err)
 		assert.Equal(t, token, parsed)
 		assert.Equal(t, 123, token.After.ID)
@@ -31,10 +35,7 @@ func TestToken(t *testing.T) {
 
 		token.After.ID = 124
 
-		parsed, err = pagetoken.ParseCursor[struct {
-			ID        int
-			CreatedAt time.Time
-		}](token.Encode())
+		parsed, err = pagetoken.ParseCursor[KeySet](token.Encode())
 		assert.NoError(t, err)
 		assert.Equal(t, token, parsed)
 		assert.Equal(t, 124, token.After.ID)
@@ -53,21 +54,6 @@ func TestToken(t *testing.T) {
 		assert.Equal(t, 200, token.Offset)
 	})
 
-	t.Run("signed", func(t *testing.T) {
-		key := pagetoken.Signed("secret")
-
-		token := pagetoken.Cursor[int]{
-			After: 123,
-		}
-		signed, err := token.Sign(key)
-		assert.NoError(t, err)
-		parsed, err := pagetoken.ParseCursor[int](signed, pagetoken.Signed(key))
-		assert.NoError(t, err)
-		assert.Equal(t, token, parsed)
-		parsed, err = pagetoken.ParseCursor[int](signed, pagetoken.Signed("wrong key"))
-		assert.Error(t, "signature mismatch", err)
-	})
-
 	t.Run("encrypted", func(t *testing.T) {
 		secret := pagetoken.Secret("secret")
 
@@ -78,8 +64,12 @@ func TestToken(t *testing.T) {
 		assert.NoError(t, err)
 		parsed, err := pagetoken.ParseCursor[int](encrypted, secret)
 		assert.NoError(t, err)
+		parsed, err = pagetoken.Decrypt[pagetoken.Cursor[int]](encrypted, secret)
+		assert.NoError(t, err)
 		assert.Equal(t, token, parsed)
 		parsed, err = pagetoken.ParseCursor[int](encrypted, pagetoken.Secret("wrong key"))
+		assert.Error(t, "cannot decrypt token", err)
+		parsed, err = pagetoken.Decrypt[pagetoken.Cursor[int]](encrypted, pagetoken.Secret("wrong key"))
 		assert.Error(t, "cannot decrypt token", err)
 	})
 
@@ -96,10 +86,7 @@ func TestToken(t *testing.T) {
 
 func BenchmarkToken(b *testing.B) {
 	b.Run("encode", func(b *testing.B) {
-		token := pagetoken.Cursor[struct {
-			ID        int
-			CreatedAt time.Time
-		}]{}
+		token := Token{}
 		token.After.ID = 123
 		b.ResetTimer()
 		for b.Loop() {
@@ -107,47 +94,40 @@ func BenchmarkToken(b *testing.B) {
 		}
 	})
 
-	b.Run("sign", func(b *testing.B) {
-		token := pagetoken.Cursor[struct {
-			ID        int
-			CreatedAt time.Time
-		}]{}
-		b.ResetTimer()
-		for b.Loop() {
-			token.Sign(pagetoken.Signed("secret"))
-		}
-	})
-
 	b.Run("parse", func(b *testing.B) {
-		token := pagetoken.Cursor[struct {
-			ID        int
-			CreatedAt time.Time
-		}]{}
+		token := Token{}
 		token.After.ID = 123
 		s := token.Encode()
 		b.ResetTimer()
 		for b.Loop() {
-			_, _ = pagetoken.ParseCursor[struct {
-				ID        int
-				CreatedAt time.Time
-			}](s)
+			_, _ = pagetoken.ParseCursor[KeySet](s)
 		}
 	})
 
-	b.Run("parse signed", func(b *testing.B) {
-		token := pagetoken.Cursor[struct {
-			ID        int
-			CreatedAt time.Time
-		}]{}
-		token.After.ID = 123
-		key := pagetoken.Signed("secret")
-		s, _ := token.Sign(key)
+	b.Run("encrypt", func(b *testing.B) {
+		token := Token{}
 		b.ResetTimer()
 		for b.Loop() {
-			_, _ = pagetoken.ParseCursor[struct {
-				ID        int
-				CreatedAt time.Time
-			}](s)
+			token.Encrypt(pagetoken.Secret("secret"))
+		}
+	})
+
+	b.Run("decrypt", func(b *testing.B) {
+		token := Token{}
+		encrypted, _ := token.Encrypt(pagetoken.Secret("secret"))
+		b.ResetTimer()
+		for b.Loop() {
+			pagetoken.Decrypt[Token](encrypted, pagetoken.Secret("secret"))
+		}
+	})
+
+	b.Run("parse decrypt", func(b *testing.B) {
+		token := Token{}
+		encrypted, _ := token.Encrypt(pagetoken.Secret("secret"))
+		b.ResetTimer()
+		for b.Loop() {
+			_, err := pagetoken.Parse[Token](encrypted, pagetoken.Secret("secret"))
+			assert.NoError(b, err)
 		}
 	})
 }

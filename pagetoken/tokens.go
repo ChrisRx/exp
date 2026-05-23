@@ -4,12 +4,6 @@ import (
 	"time"
 )
 
-// The Token interface is embedded in structs intended to be used as pagination
-// tokens within this package.
-type Token interface {
-	isToken()
-}
-
 // Cursor is used for cursor-based pagination. The keyset is defined in
 // [Cursor.After].
 type Cursor[T comparable] struct {
@@ -37,7 +31,7 @@ func ParseCursor[T comparable](s string, opts ...Option) (Cursor[T], error) {
 // There is effectively no need to check the error after successful encoding,
 // so it can be skipped in favor of better ergonomics.
 func (t Cursor[T]) Encode() string {
-	s, err := TokenMeta(t).Encode()
+	s, err := TryEncode(t)
 	if err != nil {
 		t.err = err
 	}
@@ -46,16 +40,7 @@ func (t Cursor[T]) Encode() string {
 
 // Encrypt encodes and encrypts the current token values.
 func (t Cursor[T]) Encrypt(secret []byte) (string, error) {
-	return TokenMeta(t).Encrypt(secret)
-}
-
-// Sign encodes and signs the current token values.
-func (t Cursor[T]) Sign(key []byte) (string, error) {
-	meta := TokenMeta(t)
-	if err := meta.Sign(key); err != nil {
-		return "", err
-	}
-	return meta.Encode()
+	return Encrypt(t, secret)
 }
 
 // Err returns the last error that was encountered while encoding.
@@ -88,7 +73,7 @@ func ParseOffset(s string, opts ...Option) (Offset, error) {
 // There is effectively no need to check the error after successful encoding,
 // so it can be skipped in favor of better ergonomics.
 func (t Offset) Encode() string {
-	s, err := TokenMeta(t).Encode()
+	s, err := TryEncode(t)
 	if err != nil {
 		t.err = err
 	}
@@ -97,16 +82,7 @@ func (t Offset) Encode() string {
 
 // Encrypt encodes and encrypts the current token values.
 func (t Offset) Encrypt(secret []byte) (string, error) {
-	return TokenMeta(t).Encrypt(secret)
-}
-
-// Sign encodes and signs the current token values.
-func (t Offset) Sign(key []byte) (string, error) {
-	meta := TokenMeta(t)
-	if err := meta.Sign(key); err != nil {
-		return "", err
-	}
-	return meta.Encode()
+	return Encrypt(t, secret)
 }
 
 // Err returns the last error that was encountered while encoding.
@@ -139,7 +115,7 @@ func ParsePage(s string, opts ...Option) (Page, error) {
 // There is effectively no need to check the error after successful encoding,
 // so it can be skipped in favor of better ergonomics.
 func (t Page) Encode() string {
-	s, err := TokenMeta(t).Encode()
+	s, err := TryEncode(t)
 	if err != nil {
 		t.err = err
 	}
@@ -148,16 +124,7 @@ func (t Page) Encode() string {
 
 // Encrypt encodes and encrypts the current token values.
 func (t Page) Encrypt(secret []byte) (string, error) {
-	return TokenMeta(t).Encrypt(secret)
-}
-
-// Sign encodes and signs the current token values.
-func (t Page) Sign(key []byte) (string, error) {
-	meta := TokenMeta(t)
-	if err := meta.Sign(key); err != nil {
-		return "", err
-	}
-	return meta.Encode()
+	return Encrypt(t, secret)
 }
 
 // Err returns the last error that was encountered while encoding.
