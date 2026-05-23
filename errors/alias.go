@@ -41,12 +41,12 @@ package errors
 //
 // because the former will succeed if err wraps [io/fs.ErrExist].
 //
-// [As] examines the tree of its first argument looking for an error that can be
-// assigned to its second argument, which must be a pointer. If it succeeds, it
-// performs the assignment and returns true. Otherwise, it returns false. The form
+// [AsType] examines the tree of its argument looking for an error whose
+// type matches its type argument. If it succeeds, it returns the
+// corresponding value of that type and true. Otherwise, it returns the
+// zero value of that type and false. The form
 //
-//	var perr *fs.PathError
-//	if errors.As(err, &perr) {
+//	if perr, ok := errors.AsType[*fs.PathError](err); ok {
 //		fmt.Println(perr.Path)
 //	}
 //
@@ -81,6 +81,7 @@ func New(text string) error {
 // between each string.
 //
 // A non-nil error returned by Join implements the Unwrap() []error method.
+// The errors may be inspected with [Is] and [As].
 //
 // This is an alias of https://pkg.go.dev/errors#Join.
 func Join(errs ...error) error {
@@ -100,6 +101,7 @@ func Unwrap(err error) error {
 }
 
 // Is reports whether any error in err's tree matches target.
+// The target must be comparable.
 //
 // The tree consists of err itself, followed by the errors obtained by repeatedly
 // calling its Unwrap() error or Unwrap() []error method. When err wraps multiple
@@ -120,4 +122,23 @@ func Unwrap(err error) error {
 // This is an alias of https://pkg.go.dev/errors#Is.
 func Is(err, target error) bool {
 	return errors.Is(err, target)
+}
+
+// AsType finds the first error in err's tree that matches the type E, and
+// if one is found, returns that error value and true. Otherwise, it
+// returns the zero value of E and false.
+//
+// The tree consists of err itself, followed by the errors obtained by
+// repeatedly calling its Unwrap() error or Unwrap() []error method. When
+// err wraps multiple errors, AsType examines err followed by a
+// depth-first traversal of its children.
+//
+// An error err matches the type E if the type assertion err.(E) holds,
+// or if the error has a method As(any) bool such that err.As(target)
+// returns true when target is a non-nil *E. In the latter case, the As
+// method is responsible for setting target.
+//
+// This is an alias of https://pkg.go.dev/errors#AsType.
+func AsType[E error](err error) (E, bool) {
+	return errors.AsType[E](err)
 }

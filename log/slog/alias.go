@@ -467,6 +467,13 @@ type Leveler = slog.Leveler
 // This is an alias of https://pkg.go.dev/log/slog#Logger.
 type Logger = slog.Logger
 
+// MultiHandler is a [Handler] that invokes all the given Handlers.
+// Its Enabled method reports whether any of the handlers' Enabled methods return true.
+// Its Handle, WithAttrs and WithGroup methods call the corresponding method on each of the enabled handlers.
+//
+// This is an alias of https://pkg.go.dev/log/slog#MultiHandler.
+type MultiHandler = slog.MultiHandler
+
 // A Record holds information about a log event.
 // Copies of a Record share state.
 // Do not modify a Record after handing out a copy to it.
@@ -743,6 +750,13 @@ func Log(ctx context.Context, level Level, msg string, args ...any) {
 // This is an alias of https://pkg.go.dev/log/slog#LogAttrs.
 func LogAttrs(ctx context.Context, level Level, msg string, attrs ...Attr) {
 	slog.LogAttrs(ctx, level, msg, attrs...)
+}
+
+// NewMultiHandler creates a [MultiHandler] with the given Handlers.
+//
+// This is an alias of https://pkg.go.dev/log/slog#NewMultiHandler.
+func NewMultiHandler(handlers ...Handler) *MultiHandler {
+	return slog.NewMultiHandler(handlers...)
 }
 
 // NewRecord creates a [Record] from the given arguments.
