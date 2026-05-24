@@ -43,17 +43,16 @@ To regenerate the alias files for packages after a Go version upgrade, run:
 task generate
 ```
 
-
 ## Highlights
 
 ### slices
 
-A superset of the standard library [`slices`](https://pkg.go.dev/slices) package. It can be used as a drop-in replacement — see [Extended standard library packages](#extended-standard-library-packages) below — while adding generic higher-order functions missing from the stdlib:
+A superset of the standard library [`slices`](https://pkg.go.dev/slices) package. It can be used as a drop-in replacement — see [Extended standard library packages](#extended-standard-library-packages) — while adding generic higher-order functions missing from the stdlib:
 
 ```go
 import "go.chrisrx.dev/x/slices"
 
-names := []string{"alice", "bob", "carol"}
+names := []string{"alice", "bob", "chris"}
 
 // Filter keeps elements matching a predicate.
 long := slices.Filter(names, func(s string) bool { return len(s) > 3 })
@@ -70,6 +69,8 @@ unique := slices.Uniq([]string{"a", "b", "a", "c"})
 // FlatMap maps then flattens.
 words := slices.FlatMap(sentences, strings.Fields)
 ```
+
+See [slices/README.md](slices/README.md).
 
 ### set
 
@@ -93,12 +94,6 @@ b := set.New("y", "z")
 fmt.Println(a.Union(b).List())        // [x y z]
 fmt.Println(a.Intersection(b).List()) // [y]
 fmt.Println(a.Difference(b).List())   // [x]
-
-// OrderedSet preserves insertion order and is iterable.
-os := set.NewOrderedSet("c", "a", "b")
-for v := range os.Values() {
-    fmt.Println(v) // c, a, b
-}
 ```
 
 ### env
