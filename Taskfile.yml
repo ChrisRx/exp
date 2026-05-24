@@ -1,7 +1,7 @@
 version: '3'
 
 env:
-  GOEXPERIMENT: jsonv2
+  GOEXPERIMENT: jsonv2,runtimesecret
 
 tasks:
   generate:

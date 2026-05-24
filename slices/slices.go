@@ -12,6 +12,7 @@ import (
 	"go.chrisrx.dev/x/ptr"
 )
 
+// Filter returns the elements of col for which fn returns true.
 func Filter[T any](col []T, fn func(elem T) bool) (result []T) {
 	for _, v := range col {
 		if fn(v) {
@@ -21,6 +22,8 @@ func Filter[T any](col []T, fn func(elem T) bool) (result []T) {
 	return result
 }
 
+// FilterMap maps each element of col using fn and returns only the non-zero
+// results.
 func FilterMap[T any, R any](col []T, fn func(elem T) R) (result []R) {
 	for _, v := range col {
 		if v := fn(v); !ptr.IsZero(v) {
@@ -30,6 +33,8 @@ func FilterMap[T any, R any](col []T, fn func(elem T) R) (result []R) {
 	return result
 }
 
+// FilterMap2 maps each element of col using fn and returns only elements where
+// fn returns true.
 func FilterMap2[T any, R any](col []T, fn func(elem T) (R, bool)) (result []R) {
 	for _, v := range col {
 		if v, ok := fn(v); ok {
@@ -39,6 +44,8 @@ func FilterMap2[T any, R any](col []T, fn func(elem T) (R, bool)) (result []R) {
 	return result
 }
 
+// Find returns the first element in col for which fn returns true, or the zero
+// value if none is found.
 func Find[T any](col []T, fn func(elem T) bool) T {
 	for _, v := range col {
 		if fn(v) {
@@ -48,6 +55,8 @@ func Find[T any](col []T, fn func(elem T) bool) T {
 	return *new(T)
 }
 
+// FlatMap maps each element of col to a slice using fn and concatenates the
+// results into a single slice.
 func FlatMap[T any, R any](col []T, fn func(elem T) []R) []R {
 	results := make([]R, 0)
 	for _, elem := range col {
@@ -56,6 +65,7 @@ func FlatMap[T any, R any](col []T, fn func(elem T) []R) []R {
 	return results
 }
 
+// Map returns a new slice with each element of col transformed by fn.
 func Map[T any, R any](col []T, fn func(elem T) R) []R {
 	results := make([]R, len(col))
 	for i, v := range col {
@@ -64,6 +74,22 @@ func Map[T any, R any](col []T, fn func(elem T) R) []R {
 	return results
 }
 
+// MapErr returns a new slice with each element of col transformed by fn,
+// stopping and returning the first error encountered.
+func MapErr[T any, R any](col []T, fn func(elem T) (R, error)) ([]R, error) {
+	results := make([]R, len(col))
+	for i, v := range col {
+		var err error
+		results[i], err = fn(v)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return results, nil
+}
+
+// MapEntries converts a slice to a map by applying fn to each element to
+// produce a key-value pair.
 func MapEntries[K comparable, V any, T any](col []T, fn func(elem T) (K, V)) map[K]V {
 	result := make(map[K]V)
 	for _, elem := range col {
@@ -73,6 +99,8 @@ func MapEntries[K comparable, V any, T any](col []T, fn func(elem T) (K, V)) map
 	return result
 }
 
+// Max returns the maximum value among vals, or the zero value if no arguments
+// are provided.
 func Max[T cmp.Ordered](vals ...T) T {
 	if len(vals) == 0 {
 		var zero T
@@ -85,6 +113,8 @@ func Max[T cmp.Ordered](vals ...T) T {
 	return m
 }
 
+// Min returns the minimum value among vals, or the zero value if no arguments
+// are provided.
 func Min[T cmp.Ordered](vals ...T) T {
 	if len(vals) == 0 {
 		var zero T
@@ -97,6 +127,7 @@ func Min[T cmp.Ordered](vals ...T) T {
 	return m
 }
 
+// N returns a slice of integers [0, n).
 func N[T constraints.Integer](n T) []T {
 	result := make([]T, n)
 	for i := range int(n) {
@@ -105,6 +136,8 @@ func N[T constraints.Integer](n T) []T {
 	return result
 }
 
+// Partition splits s into two slices: left contains elements for which fn
+// returns true, right contains the rest.
 func Partition[S ~[]E, E any](s S, fn func(E) bool) (left, right S) {
 	for _, elem := range s {
 		if fn(elem) {
@@ -116,14 +149,15 @@ func Partition[S ~[]E, E any](s S, fn func(E) bool) (left, right S) {
 	return
 }
 
-// Reverse reverses the elements of the slice in place.
+// Reverse reverses the elements of the slice in place. Unlike the standard
+// library [slices.Reverse], this returns the reversed slice.
 func Reverse[S ~[]E, E any](s S) S {
 	slices.Reverse(s)
 	return s
 }
 
-// Sort sorts a slice of any ordered type in ascending order.
-// When sorting floating-point numbers, NaNs are ordered before other values.
+// Sort sorts a slice of any ordered type in ascending order. When sorting
+// floating-point numbers, NaNs are ordered before other values.
 func Sort[S ~[]E, E cmp.Ordered](x S) S {
 	slices.Sort(x)
 	return x

@@ -21,12 +21,13 @@ Several packages in this module are designed as **drop-in replacements** for the
 
 | This module | Extends |
 |-------------|---------|
+| `go.chrisrx.dev/x/context` | `context` |
 | `go.chrisrx.dev/x/slices` | `slices` |
 | `go.chrisrx.dev/x/strings` | `strings` |
 | `go.chrisrx.dev/x/errors` | `errors` |
 | `go.chrisrx.dev/x/sync` | `sync` |
 
-This is implemented with [`aliaspkg`](https://go.chrisrx.dev/tools), a code-generation tool that re-exports every symbol from the target stdlib package under the replacement package name. The generated file is committed as `alias.go` and is never edited by hand. Each re-exported function includes a doc comment linking back to the original stdlib entry so godoc references remain intact.
+This is implemented with [`aliaspkg`](https://pkg.go.dev/go.chrisrx.dev/tools#readme-aliaspkg), a code-generation tool that re-exports every symbol from the target stdlib package under the replacement package name. The generated file is committed as `alias.go` and is never edited by hand. Each re-exported function includes a doc comment linking back to the original stdlib entry so godoc references remain intact.
 
 ```go
 // Before: only stdlib slices functions available.
@@ -36,10 +37,10 @@ import "slices"
 import "go.chrisrx.dev/x/slices"
 ```
 
-To regenerate the alias file for a package after a Go version upgrade, run:
+To regenerate the alias files for packages after a Go version upgrade, run:
 
 ```
-go generate ./slices/...
+task generate
 ```
 
 
@@ -219,7 +220,7 @@ type Buffer struct {
 
 // Prevent unsafe type conversion between two struct types.
 type MyID struct {
-    _ safe.NoTypeConversion[OtherID]
+    _ safe.NoTypeConversion[MyID]
     v uint64
 }
 ```
@@ -247,6 +248,35 @@ func main() {
 }
 ```
 
+### context
+
+A drop-in replacement for the standard library [`context`](https://pkg.go.dev/context) package, adding type-safe generic keys and signal-based graceful shutdown.
+
+```go
+import "go.chrisrx.dev/x/context"
+
+// Type-safe key — no unexported struct types or manual type assertions needed.
+var AuthKey = context.Key[*Auth]()
+
+ctx = AuthKey.WithValue(ctx, &Auth{Token: "Bearer ..."})
+auth := AuthKey.Value(ctx)   // zero value if not set
+AuthKey.Has(ctx)             // true/false
+AuthKey.ValueFunc(ctx, func(a *Auth) { ... }) // called only when present
+
+// Signal-based shutdown — handlers run one per signal, in registration order.
+ctx := context.Shutdown()
+
+ctx.AddHandler(func() {
+    fmt.Println("draining...")
+    server.Shutdown(context.Background())
+})
+ctx.AddHandler(func() {
+    os.Exit(1) // second signal: force exit
+})
+
+ctx.Wait() // blocks until all handlers have run
+```
+
 ## Packages
 
 | Package | Description |
@@ -255,11 +285,11 @@ func main() {
 | [backoff](backoff) | Exponential backoff with configurable intervals, multipliers, and jitter |
 | [chans](chans) | Channel utilities: collect, drain, and limit operations |
 | [constraints](constraints) | Generic numeric constraint types (`Signed`, `Unsigned`, `Integer`, `Float`, `Complex`) |
-| [context](context) | Type-safe context keys using generics |
+| [context](context/README.md) | Drop-in `context` replacement with type-safe generic keys and signal-based graceful shutdown |
 | [convert](convert) | Type-safe conversions via a registry of conversion functions |
-| [env](env) | Parse environment variables into struct fields using tags |
+| [env](env/README.md) | Parse environment variables into struct fields using tags |
 | [errors](errors) | Drop-in `errors` replacement with generic `As`, `Wrap`, `Ignore`, and `Stack` |
-| [expr](expr) | Parse and evaluate Go expressions at runtime using reflection |
+| [expr](expr/README.md) | Parse and evaluate Go expressions at runtime using reflection |
 | [future](future) | Lazy-evaluated values with channel-based synchronization |
 | [group](group) | Goroutine pool with concurrency limits, context cancellation, and error handling |
 | [log](log) | `slog.Logger` construction with environment-based configuration |
@@ -267,15 +297,14 @@ func main() {
 | [math](math) | Generic math functions (e.g. `Sum`) for numeric types |
 | [must](must) | Unwrap error tuples, panicking on non-nil errors |
 | [options](options) | Generic option pattern with composable `Option[T]` interface |
-| [pagetoken](pagetoken) | Encrypted, base64-serialized pagination tokens |
-| [print](print) | Pretty-print values as formatted JSON |
+| [pagetoken](pagetoken/README.md) | Encrypted, base64-serialized pagination tokens |
 | [ptr](ptr) | Pointer helpers: create, dereference, nullable conversion, zero-value check |
 | [random](random) | Cryptographically secure random string generation |
 | [result](result) | `Of[T]` result type with `iter.Seq` support |
 | [run](run) | Retry with configurable exponential backoff, max attempts, and time limits |
 | [safe](safe) | Execute functions safely, converting panics to errors |
 | [set](set) | Generic set supporting uncomparable values via `maphash` |
-| [slices](slices) | Slice utilities: filter, map, find, truncate |
+| [slices](slices/README.md) | Slice utilities: filter, map, find, truncate |
 | [sort](sort) | Sorted map view with pagination and iteration |
 | [stack](stack) | Caller info from the runtime, filtering internal and stdlib frames |
 | [strings](strings) | String utilities: dedent, title-case, case conversion, whitespace handling |
