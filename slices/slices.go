@@ -195,5 +195,5 @@ func Or[S ~[]E, E any](slices ...S) S {
 
 // Truncate returns a new slice truncated to the provided upper index value.
 func Truncate[S ~[]E, E any, N constraints.Integer](s S, upper N) S {
-	return s[:min(len(s)-1, int(upper))]
+	return s[:min(len(s), int(upper))]
 }
