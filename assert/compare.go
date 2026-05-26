@@ -16,7 +16,10 @@ func compare(x, y any) int {
 	ry := reflect.ValueOf(y)
 
 	if rx.Type() != ry.Type() {
-		panic(fmt.Errorf("compare: cannot compare unlike types: %T <> %T", x, y))
+		if !rx.CanConvert(ry.Type()) {
+			panic(fmt.Errorf("compare: cannot compare unlike types: %T <> %T", x, y))
+		}
+		rx = rx.Convert(ry.Type())
 	}
 
 	switch rx.Kind() {

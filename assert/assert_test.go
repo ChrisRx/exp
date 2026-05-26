@@ -87,5 +87,6 @@ func TestAssert(t *testing.T) {
 		assert.Between(NoFatal(t), 5, 10, 10)
 		assert.Between(NoFatal(t), 5, 10, 4)
 		assert.Between(NoFatal(t), 5, 10, 11)
+		assert.Between(NoFatal(t), 5, 10, int32(11), "can convert")
 	})
 }
