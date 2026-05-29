@@ -114,6 +114,21 @@ func MapEntries[K comparable, V any, T any](col []T, fn func(elem T) (K, V)) map
 	return result
 }
 
+// MapEntriesErr converts a slice to a map by applying fn to each element to
+// produce a key-value pair, stopping and returning the first error
+// encountered.
+func MapEntriesErr[K comparable, V any, T any](col []T, fn func(elem T) (K, V, error)) (map[K]V, error) {
+	result := make(map[K]V)
+	for _, elem := range col {
+		k, v, err := fn(elem)
+		if err != nil {
+			return nil, err
+		}
+		result[k] = v
+	}
+	return result, nil
+}
+
 // Max returns the maximum value among vals, or the zero value if no arguments
 // are provided.
 func Max[T cmp.Ordered](vals ...T) T {
