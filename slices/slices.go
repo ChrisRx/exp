@@ -65,6 +65,21 @@ func FlatMap[T any, R any](col []T, fn func(elem T) []R) []R {
 	return results
 }
 
+// FlatMapErr maps each element of col to a slice using fn and concatenates the
+// results into a single slice, stopping and returning the first error
+// encountered.
+func FlatMapErr[T any, R any](col []T, fn func(elem T) ([]R, error)) ([]R, error) {
+	results := make([]R, 0)
+	for _, elem := range col {
+		elems, err := fn(elem)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, elems...)
+	}
+	return results, nil
+}
+
 // Map returns a new slice with each element of col transformed by fn.
 func Map[T any, R any](col []T, fn func(elem T) R) []R {
 	results := make([]R, len(col))
