@@ -30,6 +30,9 @@ type ShutdownContext interface {
 	// Wait blocks until the context is done. This is syntactic sugar for
 	// receiving from [ShutdownContext.Done].
 	Wait()
+
+	// Close closes the context and runs any registered cleanup functions.
+	Close()
 }
 
 var defaultShutdownSignals = []os.Signal{
@@ -58,6 +61,7 @@ func Shutdown(signals ...os.Signal) ShutdownContext {
 	ctx = handlers.WithValue(ctx, sh)
 	s := &shutdownCtx{
 		Context: ctx,
+		cancel:  cancel,
 	}
 
 	logger := logger.With(
@@ -71,10 +75,13 @@ func Shutdown(signals ...os.Signal) ShutdownContext {
 	signal.Notify(sh.ch, signals...)
 
 	go func() {
-		defer cancel()
-		defer safe.Close(sh.ch)
-		defer signal.Stop(sh.ch)
-		defer runtime.GC()
+		defer func() {
+			logger.Debug("shutdown stopping ...")
+			cancel()
+			safe.Close(sh.ch)
+			signal.Stop(sh.ch)
+			runtime.GC()
+		}()
 
 		for {
 			select {
@@ -133,6 +140,7 @@ func AddCleanup(ctx context.Context, fn func()) {
 
 type shutdownCtx struct {
 	context.Context
+	cancel context.CancelFunc
 }
 
 // AddHandler adds a new handler function to a [ShutdownContext] to run when it
@@ -157,6 +165,11 @@ func (s *shutdownCtx) String() string {
 
 func (s *shutdownCtx) Wait() {
 	<-s.Done()
+	handlers.Value(s.Context).Close()
+}
+
+func (s *shutdownCtx) Close() {
+	s.cancel()
 	handlers.Value(s.Context).Close()
 }
 

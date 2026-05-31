@@ -60,4 +60,34 @@ ctx.AddCleanup(func() {
 })
 ```
 
+In `main`, use `defer ctx.Close()` to guarantee cleanup functions run when the function returns. The `ShutdownContext` registers a `runtime.AddCleanup` function that fires when the object is GC'd, but the Go runtime may exit before GC runs at the end of `main`. Calling `Close` explicitly is only necessary there — in all other contexts the runtime cleanup is sufficient.
+
+```go
+func main() {
+    ctx := context.Shutdown()
+    defer ctx.Close()
+
+    ctx.AddCleanup(func() {
+        db.Close()
+    })
+}
+```
+
 `AddHandler` and `AddCleanup` are also available as package-level functions that accept any `context.Context`, logging a warning when the context is not a `ShutdownContext`.
+
+Use the package-level `AddCleanup` in constructors that receive a `context.Context` to register cleanup automatically when the caller passes a `ShutdownContext`:
+
+```go
+func NewDatabase(ctx context.Context, dsn string) (*Database, error) {
+    db, err := sql.Open("postgres", dsn)
+    if err != nil {
+        return nil, err
+    }
+    context.AddCleanup(ctx, func() {
+        db.Close()
+    })
+    return &Database{db: db}, nil
+}
+```
+
+When `ctx` is a `ShutdownContext` the cleanup is registered; when it is any other context the call is a no-op (with a logged warning), so the constructor works correctly regardless of what the caller provides.
