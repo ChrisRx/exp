@@ -60,9 +60,9 @@ func Shutdown(signals ...os.Signal) ShutdownContext {
 	sh := &shutdownHandlers{ch: make(chan os.Signal, 1)}
 	ctx = handlers.WithValue(ctx, sh)
 	s := &shutdownCtx{
-		Context: ctx,
-		cancel:  cancel,
+		cancel: cancel,
 	}
+	s.Context = shutdownCtxKey.WithValue(ctx, s)
 
 	logger := logger.With(
 		slog.String("type", fmt.Sprintf("%T", s)),
@@ -120,22 +120,18 @@ func Shutdown(signals ...os.Signal) ShutdownContext {
 	return s
 }
 
+var shutdownCtxKey = Key[*shutdownCtx]()
+
 func AddHandler(ctx context.Context, fn func()) {
-	switch ctx := ctx.(type) {
-	case ShutdownContext:
+	shutdownCtxKey.ValueFunc(ctx, func(ctx *shutdownCtx) {
 		ctx.AddHandler(fn)
-	default:
-		slog.Warn("provided context is not ShutdownContext")
-	}
+	})
 }
 
 func AddCleanup(ctx context.Context, fn func()) {
-	switch ctx := ctx.(type) {
-	case ShutdownContext:
+	shutdownCtxKey.ValueFunc(ctx, func(ctx *shutdownCtx) {
 		ctx.AddCleanup(fn)
-	default:
-		slog.Warn("provided context is not ShutdownContext")
-	}
+	})
 }
 
 type shutdownCtx struct {
