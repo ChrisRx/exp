@@ -91,3 +91,55 @@ func NewDatabase(ctx context.Context, dsn string) (*Database, error) {
 ```
 
 When `ctx` is a `ShutdownContext` the cleanup is registered; when it is any other context the call is a no-op (with a logged warning), so the constructor works correctly regardless of what the caller provides.
+
+
+### Full example
+
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+
+	"go.chrisrx.dev/x/context"
+)
+
+type DB struct {
+	// ...
+}
+
+func NewDB(ctx context.Context) *DB {
+	context.AddCleanup(ctx, func() {
+		fmt.Printf("running database cleanup function\n")
+	})
+	return &DB{}
+}
+
+func main() {
+	ctx := context.Shutdown()
+	defer ctx.Close()
+
+	ctx.AddHandler(func() {
+		fmt.Println("\rCTRL+C pressed, attempting graceful shutdown ...")
+		select {} // blocks indefinitely
+	})
+	ctx.AddHandler(func() {
+		fmt.Println("\rCTRL+C pressed again, shutting down immediately ...")
+	})
+	ctx.AddCleanup(func() {
+		fmt.Printf("running cleanup function 1\n")
+		time.Sleep(500 * time.Millisecond)
+	})
+	ctx.AddCleanup(func() {
+		fmt.Printf("running cleanup function 2\n")
+		time.Sleep(100 * time.Millisecond)
+	})
+
+	_ = NewDB(ctx)
+
+	<-ctx.Done()
+}
+```
+
+<img src="demo.gif" width="600" />
