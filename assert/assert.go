@@ -66,6 +66,7 @@ func EventuallyFunc[T any](tb testing.TB, expected T, fn func() T, timeout time.
 				Header: header("not equal", args),
 				Diff:   diff,
 			}))
+			return
 		}
 	}
 }
