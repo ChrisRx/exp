@@ -41,6 +41,14 @@ var defaultShutdownSignals = []os.Signal{
 	syscall.SIGTERM,
 }
 
+var (
+	// context key for getting shutdown context
+	shutdownCtxKey = Key[*shutdownCtx]()
+
+	// context key for shutdown handlers
+	shutdownHandlersKey = Key[*shutdownHandlers]()
+)
+
 // Shutdown returns a new [ShutdownContext] using [context.Background] as the
 // parent context. It runs any registered handler functions when receiving any
 // of the provided signals, otherwise using a default set of signals.
@@ -57,8 +65,7 @@ var defaultShutdownSignals = []os.Signal{
 // behavior.
 func Shutdown(signals ...os.Signal) ShutdownContext {
 	ctx, cancel := context.WithCancel(context.Background())
-	sh := &shutdownHandlers{ch: make(chan os.Signal, 1)}
-	ctx = handlers.WithValue(ctx, sh)
+	ctx = shutdownHandlersKey.WithValue(ctx, &shutdownHandlers{})
 	s := &shutdownCtx{
 		cancel: cancel,
 	}
@@ -72,14 +79,15 @@ func Shutdown(signals ...os.Signal) ShutdownContext {
 	if len(signals) == 0 {
 		signals = defaultShutdownSignals
 	}
-	signal.Notify(sh.ch, signals...)
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, signals...)
 
 	go func() {
 		defer func() {
 			logger.Debug("shutdown stopping ...")
 			cancel()
-			safe.Close(sh.ch)
-			signal.Stop(sh.ch)
+			safe.Close(ch)
+			signal.Stop(ch)
 			runtime.GC()
 		}()
 
@@ -88,17 +96,17 @@ func Shutdown(signals ...os.Signal) ShutdownContext {
 			case <-ctx.Done():
 				logger.Debug("parent context canceled")
 				return
-			case sig, ok := <-sh.ch:
+			case sig, ok := <-ch:
 				if !ok {
 					logger.Debug("signal notify stopped")
 					return
 				}
-				sh := handlers.Value(ctx)
+				sh := shutdownHandlersKey.Value(ctx)
 				if len(sh.handlers) == 0 {
 					logger.Debug("shutdown context done")
 					// Restore normal signal handling and attempt to resend signal back
 					// to this process.
-					signal.Stop(sh.ch)
+					signal.Stop(ch)
 					self, _ := os.FindProcess(os.Getpid())
 					self.Signal(sig)
 					return
@@ -114,20 +122,26 @@ func Shutdown(signals ...os.Signal) ShutdownContext {
 	runtime.AddCleanup(s, func(ch chan os.Signal) {
 		logger.Debug("runtime cleanup called")
 		cancel()
-		signal.Stop(sh.ch)
-		handlers.Value(ctx).Close()
-	}, sh.ch)
+		signal.Stop(ch)
+		shutdownHandlersKey.Value(ctx).Close()
+	}, ch)
 	return s
 }
 
-var shutdownCtxKey = Key[*shutdownCtx]()
-
+// AddHandler adds fn to the [ShutdownContext] embedded in ctx. It is a
+// package-level convenience for callers that hold a plain [context.Context]
+// rather than a [ShutdownContext] directly. If ctx does not contain a
+// [ShutdownContext], the call is a no-op.
 func AddHandler(ctx context.Context, fn func()) {
 	shutdownCtxKey.ValueFunc(ctx, func(ctx *shutdownCtx) {
 		ctx.AddHandler(fn)
 	})
 }
 
+// AddCleanup adds fn to the [ShutdownContext] embedded in ctx. It is a
+// package-level convenience for callers that hold a plain [context.Context]
+// rather than a [ShutdownContext] directly. If ctx does not contain a
+// [ShutdownContext], the call is a no-op.
 func AddCleanup(ctx context.Context, fn func()) {
 	shutdownCtxKey.ValueFunc(ctx, func(ctx *shutdownCtx) {
 		ctx.AddCleanup(fn)
@@ -142,15 +156,15 @@ type shutdownCtx struct {
 // AddHandler adds a new handler function to a [ShutdownContext] to run when it
 // is marked done.
 func (s *shutdownCtx) AddHandler(fn func()) {
-	handlers.ValueFunc(s.Context, func(sh *shutdownHandlers) {
+	shutdownHandlersKey.ValueFunc(s.Context, func(sh *shutdownHandlers) {
 		sh.addHandler(fn)
 	})
 }
 
 // AddCleanup adds a new cleanup function to a [ShutdownContext] to run when it
-// is garbage collected.
+// is garbage collected or closed.
 func (s *shutdownCtx) AddCleanup(fn func()) {
-	handlers.ValueFunc(s.Context, func(sh *shutdownHandlers) {
+	shutdownHandlersKey.ValueFunc(s.Context, func(sh *shutdownHandlers) {
 		sh.addCleanup(fn)
 	})
 }
@@ -161,21 +175,15 @@ func (s *shutdownCtx) String() string {
 
 func (s *shutdownCtx) Wait() {
 	<-s.Done()
-	handlers.Value(s.Context).Close()
+	shutdownHandlersKey.Value(s.Context).Close()
 }
 
 func (s *shutdownCtx) Close() {
 	s.cancel()
-	handlers.Value(s.Context).Close()
+	shutdownHandlersKey.Value(s.Context).Close()
 }
 
-// context key for shutdown handlers
-var handlers = Key[*shutdownHandlers]()
-
 type shutdownHandlers struct {
-	// for testing
-	ch chan (os.Signal)
-
 	mu              sync.Mutex
 	handlers        []func()
 	cleanupHandlers []func()

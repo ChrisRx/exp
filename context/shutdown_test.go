@@ -11,11 +11,57 @@ import (
 	"go.chrisrx.dev/x/log/slog"
 )
 
+func sendSignal(sig syscall.Signal) {
+	// Adding a small amount of wait when sending signals since rapidly re-sent
+	// signals might get blocked instead of queued.
+	time.Sleep(10 * time.Millisecond)
+	syscall.Kill(os.Getpid(), sig)
+}
+
 func TestShutdown(t *testing.T) {
 	lvl.Set(slog.LevelDebug)
 
+	t.Run("non-default signal", func(t *testing.T) {
+		ctx := Shutdown(syscall.SIGUSR1)
+		defer ctx.Close()
+
+		var called bool
+		ctx.AddHandler(func() {
+			called = true
+		})
+
+		go sendSignal(syscall.SIGUSR1)
+
+		<-ctx.Done()
+		assert.Eventually(t, true, &called, 100*time.Millisecond)
+	})
+
+	t.Run("multiple non-default signals", func(t *testing.T) {
+		ctx := Shutdown(syscall.SIGUSR1, syscall.SIGUSR2)
+		defer ctx.Close()
+
+		var calledA, calledB bool
+		ctx.AddHandler(func() {
+			calledA = true
+			select {} // will never finish
+		})
+		ctx.AddHandler(func() {
+			calledB = true
+		})
+
+		go func() {
+			sendSignal(syscall.SIGUSR1)
+			sendSignal(syscall.SIGUSR2)
+		}()
+
+		<-ctx.Done()
+		assert.Eventually(t, true, &calledA, 100*time.Millisecond, "first signal")
+		assert.Eventually(t, true, &calledB, 100*time.Millisecond, "second signal")
+	})
+
 	t.Run("hard shutdown", func(t *testing.T) {
 		ctx := Shutdown()
+		defer ctx.Close()
 
 		var calledA bool
 		ctx.AddHandler(func() {
@@ -37,10 +83,10 @@ func TestShutdown(t *testing.T) {
 		})
 
 		go func() {
-			handlers.Value(ctx).ch <- syscall.SIGINT
-			handlers.Value(ctx).ch <- syscall.SIGINT
+			sendSignal(syscall.SIGINT)
+			sendSignal(syscall.SIGINT)
 			time.Sleep(100 * time.Millisecond)
-			handlers.Value(ctx).ch <- syscall.SIGINT
+			sendSignal(syscall.SIGINT)
 		}()
 
 		<-ctx.Done()
@@ -51,6 +97,7 @@ func TestShutdown(t *testing.T) {
 
 	t.Run("cleanup", func(t *testing.T) {
 		ctx := Shutdown()
+		defer ctx.Close()
 
 		ctx.AddHandler(func() {
 			fmt.Println("\rCTRL+C pressed, attempting graceful shutdown ...")
@@ -66,8 +113,8 @@ func TestShutdown(t *testing.T) {
 		})
 
 		go func() {
-			handlers.Value(ctx).ch <- syscall.SIGINT
-			handlers.Value(ctx).ch <- syscall.SIGINT
+			sendSignal(syscall.SIGINT)
+			sendSignal(syscall.SIGINT)
 		}()
 
 		ctx.Wait()
