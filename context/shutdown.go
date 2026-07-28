@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"runtime"
 	"sync"
 	"syscall"
 
@@ -88,7 +87,6 @@ func Shutdown(signals ...os.Signal) ShutdownContext {
 			cancel()
 			safe.Close(ch)
 			signal.Stop(ch)
-			runtime.GC()
 		}()
 
 		for {
@@ -118,13 +116,6 @@ func Shutdown(signals ...os.Signal) ShutdownContext {
 			}
 		}
 	}()
-
-	runtime.AddCleanup(s, func(ch chan os.Signal) {
-		logger.Debug("runtime cleanup called")
-		cancel()
-		signal.Stop(ch)
-		shutdownHandlersKey.Value(ctx).Close()
-	}, ch)
 	return s
 }
 
