@@ -431,15 +431,20 @@ func TestParse(t *testing.T) {
 		})
 	})
 
-	t.Run("deferred methods", func(t *testing.T) {
+	t.Run("setup methods", func(t *testing.T) {
+		opts := env.MustParseFor[struct {
+			*SetupTest
+		}]()
+
+		assert.Equal(t, "is set", opts.DefaultValue)
 		assert.WithEnviron(t, map[string]string{
-			"ENABLE_SET_DEFAULT": "true",
+			"SETUP_DISABLED": "true",
 		}, func() {
 			opts := env.MustParseFor[struct {
-				*DeferredTest
+				*SetupTest
 			}]()
 
-			assert.Equal(t, "is set", opts.DefaultValue)
+			assert.Equal(t, "", opts.DefaultValue)
 		})
 	})
 }
@@ -455,12 +460,10 @@ func (e *Encoder) UnmarshalText(data []byte) error {
 	return nil
 }
 
-type DeferredTest struct {
-	_ env.Deferred `env:"ENABLE_SET_DEFAULT" method:"SetDefault"`
-
+type SetupTest struct {
 	DefaultValue string
 }
 
-func (d *DeferredTest) SetDefault() {
-	d.DefaultValue = "is set"
+func (s *SetupTest) Setup() {
+	s.DefaultValue = "is set"
 }

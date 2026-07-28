@@ -65,8 +65,11 @@ func MustParseFor[T any](opts ...ParserOption) T {
 	return v
 }
 
+type Private any
+
 // Deferred is a special type used in fields to configure calling methods on
 // structs after parsing is done.
+// XXX:
 type Deferred bool
 
 func isDeferred(rv reflect.Value) bool {
@@ -99,13 +102,28 @@ func RootPrefix(prefix string) ParserOption {
 	}
 }
 
+type setupFunc struct {
+	prefixes []string
+	fn       func() error
+}
+
+func (s setupFunc) IsEnabled() bool {
+	env := strings.ToUpper(strings.Join(append(s.prefixes, "SETUP_DISABLED"), "_"))
+	if v, ok := os.LookupEnv(env); ok {
+		if must.Get0(strconv.ParseBool(v)) {
+			return false
+		}
+	}
+	return true
+}
+
 // Parser is an environment variable parser for structs.
 type Parser struct {
 	DisableAutoPrefix bool
 	RootPrefix        string
 	RequireTagged     bool
 
-	deferred []string
+	inits []setupFunc
 }
 
 // NewParser constructs a new [Parser] using the provided options.
@@ -136,15 +154,12 @@ func (p *Parser) Parse(v any) error {
 			return err
 		}
 	}
-	for _, deferred := range p.deferred {
-		method := rv.MethodByName(deferred)
-		if !method.IsValid() {
-			return fmt.Errorf("deferred method is invalid: %q", deferred)
+	for _, init := range p.inits {
+		if init.IsEnabled() {
+			if err := init.fn(); err != nil {
+				return err
+			}
 		}
-		if method.Type().NumIn() > 0 {
-			return fmt.Errorf("deferred method cannot accept arguments")
-		}
-		method.Call(nil)
 	}
 	return nil
 }
@@ -162,18 +177,6 @@ func (p *Parser) parse(rv reflect.Value, field Field) error {
 			rv.Set(reflect.New(rv.Type().Elem()))
 		}
 		return p.parse(reflect.Indirect(rv), field)
-	case isDeferred(rv):
-		s, ok := os.LookupEnv(field.Key())
-		if !ok {
-			if field.Default() == "" {
-				return nil
-			}
-			s = field.Default()
-		}
-		if must.Get0(strconv.ParseBool(s)) {
-			p.deferred = append(p.deferred, field.DeferredMethod)
-		}
-		return nil
 	case structs.HasConversion(rv), structs.IsWellKnown(rv):
 		// If we have a custom parser or a common interface, it is important that
 		// we don't range over it as a struct, so we go ahead and parse it as a
@@ -190,6 +193,26 @@ func (p *Parser) parse(rv reflect.Value, field Field) error {
 		default:
 			prefixes = append(prefixes, field.Env)
 		}
+
+		// Check if this struct implements a setup/init method.
+		switch v := reflectx.Interface(rv).(type) {
+		case interface{ Setup() }:
+			p.inits = append(p.inits, setupFunc{
+				prefixes: field.prefixes,
+				fn: func() error {
+					v.Setup()
+					return nil
+				},
+			})
+		case interface{ Setup() error }:
+			p.inits = append(p.inits, setupFunc{
+				prefixes: field.prefixes,
+				fn: func() error {
+					return v.Setup()
+				},
+			})
+		}
+
 		for i := range rv.NumField() {
 			if err := p.parse(rv.Field(i), newField(rv.Type().Field(i), prefixes...)); err != nil {
 				return err

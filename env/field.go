@@ -21,19 +21,16 @@ type Field struct {
 	Validate string
 	Required bool
 
-	DeferredMethod string
-
 	prefixes []string
 }
 
 func newField(st reflect.StructField, prefixes ...string) Field {
 	return Field{
-		Field:          structs.Field(st),
-		Env:            st.Tag.Get("env"),
-		Validate:       st.Tag.Get("validate"),
-		Required:       must.Get0(strconv.ParseBool(st.Tag.Get("required"))),
-		DeferredMethod: st.Tag.Get("method"),
-		prefixes:       slices.FilterMap(prefixes, strings.ToUpper),
+		Field:    structs.Field(st),
+		Env:      st.Tag.Get("env"),
+		Validate: st.Tag.Get("validate"),
+		Required: must.Get0(strconv.ParseBool(st.Tag.Get("required"))),
+		prefixes: slices.FilterMap(prefixes, strings.ToUpper),
 	}
 }
 

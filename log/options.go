@@ -6,14 +6,11 @@ import (
 	"log/slog"
 	"os"
 
-	"go.chrisrx.dev/x/env"
 	"go.chrisrx.dev/x/slices"
 )
 
 // Options specifies the configuration for a logger from environment variables.
 type Options struct {
-	_ env.Deferred `env:"LOG_DEFAULT" method:"SetDefault" default:"true"`
-
 	Level       *slog.LevelVar `env:"LOG_LEVEL" default:"INFO"`
 	Format      Format         `env:"LOG_FORMAT" default:"text"`
 	AddSource   bool           `env:"LOG_ADD_SOURCE" default:"true"`
@@ -22,7 +19,7 @@ type Options struct {
 	out io.Writer
 }
 
-func (o Options) SetDefault() {
+func (o Options) Setup() {
 	DefaultLevel.Set(o.Level.Level())
 	slog.SetDefault(slog.New(o.New()))
 	slog.Debug("default slog configured from environment", slog.Any("options", o))
