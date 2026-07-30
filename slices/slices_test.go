@@ -39,4 +39,14 @@ func TestSlices(t *testing.T) {
 	t.Run("Or", func(t *testing.T) {
 		assert.Equal(t, []string{"a", "b", "c"}, slices.Or(nil, []string{}, []string{"a", "b", "c"}, []string{"d", "e", "f"}))
 	})
+	t.Run("Make", func(t *testing.T) {
+		s := slices.N(10)
+		assert.Equal(t, s[2:10], slices.Make(s, 2, 15))
+		assert.Equal(t, s[2:9], slices.Make(s, 2, 9))
+		assert.Equal(t, s[0:0], slices.Make(s, 11, 15))
+		assert.Equal(t, s[0:0], slices.Make([]int{}, 11, 15))
+		assert.Equal(t, s[0:0], slices.Make([]int{}, 0, 15))
+		assert.Equal(t, s[0:1], slices.Make([]int{0}, 0, 1))
+		assert.Equal(t, s[0:1], slices.Make([]int{0}, 0, 15))
+	})
 }

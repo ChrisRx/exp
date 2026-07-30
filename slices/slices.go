@@ -227,3 +227,9 @@ func Or[S ~[]E, E any](slices ...S) S {
 func Truncate[S ~[]E, E any, N constraints.Integer](s S, upper N) S {
 	return s[:min(len(s), int(upper))]
 }
+
+// Make returns s[i:j] with both bounds clamped to len(s), preventing
+// out-of-range panics.
+func Make[S ~[]E, E any, N constraints.Integer](s S, i, j N) S {
+	return s[min(int(i), len(s)):min(int(j), len(s))]
+}
