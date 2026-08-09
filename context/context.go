@@ -22,6 +22,7 @@ type ContextKey[V any] interface {
 
 type key[V any] struct {
 	_ safe.NoCopy
+	_ [1]byte // cannot be zero-sized struct
 }
 
 // Key creates a new key used for loading and storing values in a

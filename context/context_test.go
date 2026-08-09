@@ -42,4 +42,14 @@ func TestKey(t *testing.T) {
 		assert.Equal(t, "itworks", ctx.Value(k))
 		assert.Equal(t, "itworks", k.Value(ctx))
 	})
+	t.Run("overwrite", func(t *testing.T) {
+		k1 := context.Key[string]()
+		k2 := context.Key[string]()
+
+		ctx := t.Context()
+		ctx = context.WithValue(ctx, k1, "first value")
+		ctx = context.WithValue(ctx, k2, "second value")
+		assert.Equal(t, "first value", k1.Value(ctx))
+		assert.Equal(t, "second value", k2.Value(ctx))
+	})
 }
