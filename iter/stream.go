@@ -14,7 +14,7 @@ import (
 type Stream[V any] Seq[V]
 
 // From converts a [Seq] into a [Stream].
-func From[V any](seq Seq[V]) Stream[V] {
+func From[V any, S ~func(func(V) bool)](seq S) Stream[V] {
 	return Stream[V](seq)
 }
 
