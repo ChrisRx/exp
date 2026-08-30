@@ -233,3 +233,7 @@ func Truncate[S ~[]E, E any, N constraints.Integer](s S, upper N) S {
 func Make[S ~[]E, E any, N constraints.Integer](s S, i, j N) S {
 	return s[min(int(i), len(s)):min(int(j), len(s))]
 }
+
+func Of[S ~[]E, E any](elems ...E) S {
+	return append(S{}, elems...)
+}

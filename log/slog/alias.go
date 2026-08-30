@@ -683,6 +683,8 @@ func NewLogLogger(h Handler, level Level) *log.Logger {
 }
 
 // Debug calls [Logger.Debug] on the default logger.
+// It uses [context.Background] internally; to specify the context, use
+// [DebugContext].
 //
 // This is an alias of https://pkg.go.dev/log/slog#Debug.
 func Debug(msg string, args ...any) {
@@ -697,6 +699,8 @@ func DebugContext(ctx context.Context, msg string, args ...any) {
 }
 
 // Info calls [Logger.Info] on the default logger.
+// It uses [context.Background] internally; to specify the context, use
+// [InfoContext].
 //
 // This is an alias of https://pkg.go.dev/log/slog#Info.
 func Info(msg string, args ...any) {
@@ -711,6 +715,8 @@ func InfoContext(ctx context.Context, msg string, args ...any) {
 }
 
 // Warn calls [Logger.Warn] on the default logger.
+// It uses [context.Background] internally; to specify the context, use
+// [WarnContext].
 //
 // This is an alias of https://pkg.go.dev/log/slog#Warn.
 func Warn(msg string, args ...any) {
@@ -725,6 +731,8 @@ func WarnContext(ctx context.Context, msg string, args ...any) {
 }
 
 // Error calls [Logger.Error] on the default logger.
+// It uses [context.Background] internally; to specify the context, use
+// [ErrorContext].
 //
 // This is an alias of https://pkg.go.dev/log/slog#Error.
 func Error(msg string, args ...any) {

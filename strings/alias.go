@@ -162,6 +162,7 @@ func ContainsRune(s string, r rune) bool {
 }
 
 // ContainsFunc reports whether any Unicode code points r within s satisfy f(r).
+// It stops as soon as a call to f returns true.
 //
 // This is an alias of https://pkg.go.dev/strings#ContainsFunc.
 func ContainsFunc(s string, f func(rune) bool) bool {
@@ -575,4 +576,14 @@ func CutPrefix(s, prefix string) (after string, found bool) {
 // This is an alias of https://pkg.go.dev/strings#CutSuffix.
 func CutSuffix(s, suffix string) (before string, found bool) {
 	return strings.CutSuffix(s, suffix)
+}
+
+// CutLast slices s around the last instance of sep,
+// returning the text before and after sep.
+// The found result reports whether sep appears in s.
+// If sep does not appear in s, CutLast returns s, "", false.
+//
+// This is an alias of https://pkg.go.dev/strings#CutLast.
+func CutLast(s, sep string) (before, after string, found bool) {
+	return strings.CutLast(s, sep)
 }
