@@ -1,7 +1,6 @@
 package convert
 
 import (
-	"reflect"
 	"testing"
 	"time"
 
@@ -22,7 +21,7 @@ func TestConvert(t *testing.T) {
 	}
 
 	t.Run("elem to elem", func(t *testing.T) {
-		conversions = make(map[[2]reflect.Type]ConversionFunc[any, any])
+		registry = make(Registry)
 		Register(func(s string, opts ...Option) (time.Time, error) {
 			return time.Parse(time.RFC3339Nano, s)
 		})
@@ -43,7 +42,7 @@ func TestConvert(t *testing.T) {
 	})
 
 	t.Run("elem to ptr", func(t *testing.T) {
-		conversions = make(map[[2]reflect.Type]ConversionFunc[any, any])
+		registry = make(Registry)
 		Register(func(s string, opts ...Option) (*time.Time, error) {
 			t, err := time.Parse(time.RFC3339Nano, s)
 			if err != nil {
@@ -68,7 +67,7 @@ func TestConvert(t *testing.T) {
 	})
 
 	t.Run("ptr to ptr", func(t *testing.T) {
-		conversions = make(map[[2]reflect.Type]ConversionFunc[any, any])
+		registry = make(Registry)
 		Register(func(s *string, opts ...Option) (*time.Time, error) {
 			t, err := time.Parse(time.RFC3339Nano, ptr.From(s))
 			if err != nil {
@@ -93,7 +92,7 @@ func TestConvert(t *testing.T) {
 	})
 
 	t.Run("ptr to elem", func(t *testing.T) {
-		conversions = make(map[[2]reflect.Type]ConversionFunc[any, any])
+		registry = make(Registry)
 		Register(func(s *string, opts ...Option) (time.Time, error) {
 			return time.Parse(time.RFC3339Nano, ptr.From(s))
 		})
