@@ -12,8 +12,6 @@ import (
 	"time"
 	"unsafe"
 
-	"google.golang.org/protobuf/proto"
-
 	"go.chrisrx.dev/x/assert/internal/slices"
 	"go.chrisrx.dev/x/internal/reflectx"
 )
@@ -141,8 +139,7 @@ func (p *printer) do(rv reflect.Value) {
 		p.fprint("*")
 		elem := rv.Elem()
 		if elem.Kind() == reflect.Struct {
-			_, isProto := reflect.TypeAssert[proto.Message](rv)
-			p.doStruct(elem, isProto)
+			p.doStruct(elem, isProtoMessage(rv))
 			return
 		}
 		p.do(elem)
@@ -207,6 +204,18 @@ func (p *printer) doStruct(rv reflect.Value, exportedOnly bool) {
 	p.depth--
 	p.fprint(strings.Repeat(p.indent, p.depth))
 	p.fprint("}")
+}
+
+// isProtoMessage reports whether rv implements proto.Message, checked by
+// method name rather than a real interface assertion so that this package
+// doesn't need to import google.golang.org/protobuf.
+func isProtoMessage(rv reflect.Value) bool {
+	t := rv.Type()
+	if t.Kind() != reflect.Pointer {
+		t = reflect.PointerTo(t)
+	}
+	m, ok := t.MethodByName("ProtoReflect")
+	return ok && m.Type.NumIn() == 1 && m.Type.NumOut() == 1
 }
 
 func (p *printer) doPointer(ptr, v reflect.Value) {

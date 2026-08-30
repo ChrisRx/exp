@@ -1,7 +1,7 @@
 version: '3'
 
 env:
-  GOEXPERIMENT: jsonv2,runtimesecret
+  GOEXPERIMENT: runtimesecret
 
 tasks:
   generate:
@@ -11,3 +11,4 @@ tasks:
   test:
     cmds:
       - go test ./...
+      - go test ./internal/tests/...

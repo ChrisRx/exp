@@ -3,32 +3,15 @@ package assert_test
 import (
 	"context"
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 	"unsafe"
 
 	"go.chrisrx.dev/x/assert"
 	"go.chrisrx.dev/x/assert/internal/diff"
-	"go.chrisrx.dev/x/assert/internal/testdata/test3"
 )
 
 func TestPrinter(t *testing.T) {
-	t.Run("proto", func(t *testing.T) {
-		assert.Equal(t,
-			&test3.TestAllTypes{
-				SingularInt32: 1,
-				OptionalInt64: new(int64(1)),
-				SingularBytes: []byte("test\x00\x0a"),
-			},
-			&test3.TestAllTypes{
-				SingularInt32: 1,
-				OptionalInt64: new(int64(1)),
-				SingularBytes: []byte("test\x00\x0a"),
-			},
-		)
-	})
-
 	t.Run("empty map", func(t *testing.T) {
 		assert.Equal(t,
 			"(map[string]string)(nil)",
@@ -41,7 +24,6 @@ func TestPrinter(t *testing.T) {
 	})
 
 	t.Run("print", func(t *testing.T) {
-		// t.Skip()
 		type Nested struct {
 			String string
 			T      time.Time
@@ -196,20 +178,5 @@ func TestDo(t *testing.T) {
 			"b": a,
 		}
 		assert.Print(b)
-	})
-
-	t.Run("proto skip", func(t *testing.T) {
-		msg := &test3.TestAllTypes_NestedMessage{
-			A: 123,
-			Corecursive: &test3.TestAllTypes{
-				SingularInt32: 1,
-				OptionalInt64: new(int64(1)),
-				SingularBytes: []byte("test\x00\x0a"),
-			},
-		}
-		assert.Equal(t,
-			false,
-			strings.Contains(assert.Sprint(msg), "impl.MessageState{"),
-		)
 	})
 }
