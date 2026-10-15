@@ -145,6 +145,10 @@ func TestPrintTypes(t *testing.T) {
 			value: []byte("byte value"),
 		},
 		{
+			name:  "byte array",
+			value: [5]uint8{'h', 'e', 'l', 'l', 'o'},
+		},
+		{
 			name:  "time.Duration",
 			value: 15 * time.Second,
 		},

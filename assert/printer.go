@@ -84,6 +84,16 @@ func (p *printer) do(rv reflect.Value) {
 		}
 	case reflect.Array, reflect.Slice:
 		if rv.Type().Elem().Kind() == reflect.Uint8 {
+			if rv.Kind() == reflect.Array {
+				// Bytes requires an addressable array, so copy into one.
+				if !rv.CanAddr() {
+					tmp := reflect.New(rv.Type()).Elem()
+					tmp.Set(rv)
+					rv = tmp
+				}
+				p.fprintf("[%d]byte(%q)", rv.Len(), rv.Bytes())
+				return
+			}
 			p.fprintf("[]byte(%q)", rv.Bytes())
 			return
 		}
