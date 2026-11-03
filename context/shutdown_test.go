@@ -14,6 +14,11 @@ import (
 	"go.chrisrx.dev/x/log/slog"
 )
 
+func init() {
+	// Tests don't run in a terminal, but intercepts are tested as if they did.
+	isTerminal = func() bool { return true }
+}
+
 func sendSignal(sig syscall.Signal) {
 	// Adding a small amount of wait when sending signals since rapidly re-sent
 	// signals might get blocked instead of queued.
@@ -37,11 +42,11 @@ func TestShutdown(t *testing.T) {
 	lvl.Set(slog.LevelDebug)
 
 	t.Run("non-default signal", func(t *testing.T) {
-		ctx := Shutdown(syscall.SIGUSR1)
+		ctx := Shutdown(Signals(syscall.SIGUSR1))
 		defer ctx.Close()
 
 		called := make(chan struct{}, 1)
-		ctx.AddHandler(func() {
+		ctx.AddHandler(func(os.Signal) {
 			called <- struct{}{}
 		})
 
@@ -54,15 +59,15 @@ func TestShutdown(t *testing.T) {
 	})
 
 	t.Run("multiple non-default signals", func(t *testing.T) {
-		ctx := Shutdown(syscall.SIGUSR1, syscall.SIGUSR2)
+		ctx := Shutdown(Signals(syscall.SIGUSR1, syscall.SIGUSR2))
 		defer ctx.Close()
 
 		calledA, calledB := make(chan struct{}, 1), make(chan struct{}, 1)
-		ctx.AddHandler(func() {
+		ctx.AddHandler(func(os.Signal) {
 			calledA <- struct{}{}
 			select {} // will never finish
 		})
-		ctx.AddHandler(func() {
+		ctx.AddHandler(func(os.Signal) {
 			calledB <- struct{}{}
 		})
 
@@ -82,12 +87,12 @@ func TestShutdown(t *testing.T) {
 		defer ctx.Close()
 
 		calledA, calledB := make(chan struct{}, 1), make(chan struct{}, 1)
-		ctx.AddHandler(func() {
+		ctx.AddHandler(func(os.Signal) {
 			calledA <- struct{}{}
 			fmt.Println("\rCTRL+C pressed again, attempting a faster shutdown ...")
 			select {} // will never finish
 		})
-		ctx.AddHandler(func() {
+		ctx.AddHandler(func(os.Signal) {
 			calledB <- struct{}{}
 			fmt.Println("\rCTRL+C pressed a third time, exiting immediately")
 		})
@@ -108,7 +113,7 @@ func TestShutdown(t *testing.T) {
 		ctx := Shutdown()
 		defer ctx.Close()
 
-		ctx.AddHandler(func() {
+		ctx.AddHandler(func(os.Signal) {
 			fmt.Println("\rCTRL+C pressed again, shutting down ...")
 		})
 		var cleanupCalled bool
@@ -128,12 +133,12 @@ func TestShutdown(t *testing.T) {
 
 func TestShutdownProgram(t *testing.T) {
 	t.Run("escalates to a hard stop on a second signal", func(t *testing.T) {
-		ctx := Shutdown(syscall.SIGUSR1)
+		ctx := Shutdown(Signals(syscall.SIGUSR1))
 		defer ctx.Close()
 
 		program := ctx.Program()
 		hardStopped := make(chan bool, 1)
-		ctx.AddHandler(func() {
+		ctx.AddHandler(func(os.Signal) {
 			hardStopped <- program.Err() != nil
 		})
 
@@ -149,7 +154,7 @@ func TestShutdownProgram(t *testing.T) {
 	})
 
 	t.Run("values are found from both contexts", func(t *testing.T) {
-		ctx := Shutdown(syscall.SIGUSR1)
+		ctx := Shutdown(Signals(syscall.SIGUSR1))
 		defer ctx.Close()
 
 		var cleaned bool
@@ -163,7 +168,7 @@ func TestShutdownProgram(t *testing.T) {
 
 // shutdownHelper is run as a child process by TestShutdownWithoutHandlers.
 func shutdownHelper() {
-	ctx := Shutdown(syscall.SIGTERM)
+	ctx := Shutdown(Signals(syscall.SIGTERM))
 	fmt.Println("ready")
 	switch os.Getenv("SHUTDOWN_HELPER") {
 	case "wait":
@@ -228,7 +233,7 @@ func TestShutdownIntercept(t *testing.T) {
 		defer ctx.Close()
 
 		intercepted := make(chan struct{}, 2)
-		ctx.Intercept(func() { intercepted <- struct{}{} })
+		ctx.Intercept(func() { intercepted <- struct{}{} }, 0)
 
 		go sendSignal(syscall.SIGINT)
 		receive(t, intercepted, time.Second, "the interrupt wasn't intercepted")
@@ -247,8 +252,8 @@ func TestShutdownIntercept(t *testing.T) {
 		defer ctx.Close()
 
 		order := make(chan string, 2)
-		ctx.Intercept(func() { order <- "first" })
-		ctx.Intercept(func() { order <- "second" })
+		ctx.Intercept(func() { order <- "first" }, 0)
+		ctx.Intercept(func() { order <- "second" }, 0)
 
 		go sendSignal(syscall.SIGINT)
 		assert.Equal(t, "first", receive(t, order, time.Second, "the first interrupt wasn't intercepted"))
@@ -265,7 +270,7 @@ func TestShutdownIntercept(t *testing.T) {
 		defer ctx.Close()
 
 		intercepted := make(chan struct{}, 2)
-		ctx.InterceptTimeout(func() { intercepted <- struct{}{} }, 50*time.Millisecond)
+		ctx.Intercept(func() { intercepted <- struct{}{} }, 50*time.Millisecond)
 
 		go sendSignal(syscall.SIGINT)
 		receive(t, intercepted, time.Second, "the interrupt wasn't intercepted")
@@ -286,7 +291,7 @@ func TestShutdownIntercept(t *testing.T) {
 		defer ctx.Close()
 
 		var intercepted bool
-		ctx.Intercept(func() { intercepted = true })
+		ctx.Intercept(func() { intercepted = true }, 0)
 
 		go sendSignal(syscall.SIGTERM)
 		<-ctx.Done()
@@ -300,9 +305,9 @@ func TestShutdownIntercept(t *testing.T) {
 		defer ctx.Close()
 
 		intercepted := make(chan struct{}, 2)
-		ctx.InterceptTimeout(func() { intercepted <- struct{}{} }, 20*time.Millisecond)
+		ctx.Intercept(func() { intercepted <- struct{}{} }, 20*time.Millisecond)
 		handled := make(chan struct{}, 1)
-		ctx.AddHandler(func() { handled <- struct{}{} })
+		ctx.AddHandler(func(os.Signal) { handled <- struct{}{} })
 
 		go sendSignal(syscall.SIGINT)
 		receive(t, intercepted, time.Second, "the interrupt wasn't intercepted")
@@ -319,7 +324,7 @@ func TestShutdownIntercept(t *testing.T) {
 
 func TestAfterSignal(t *testing.T) {
 	t.Run("called with the signal that canceled", func(t *testing.T) {
-		ctx := Shutdown(syscall.SIGUSR1)
+		ctx := Shutdown(Signals(syscall.SIGUSR1))
 		defer ctx.Close()
 
 		got := make(chan os.Signal, 1)
@@ -332,7 +337,7 @@ func TestAfterSignal(t *testing.T) {
 	})
 
 	t.Run("not called when closed", func(t *testing.T) {
-		ctx := Shutdown(syscall.SIGUSR1)
+		ctx := Shutdown(Signals(syscall.SIGUSR1))
 
 		called := make(chan struct{}, 1)
 		AfterSignal(ctx, func(os.Signal) { called <- struct{}{} })
@@ -346,4 +351,112 @@ func TestAfterSignal(t *testing.T) {
 		_, ok := SignalCause(ctx)
 		assert.Equal(t, false, ok)
 	})
+}
+
+func TestShutdownBeforeCancel(t *testing.T) {
+	t.Run("runs in order before canceling", func(t *testing.T) {
+		ctx := Shutdown(Signals(syscall.SIGUSR1))
+		defer ctx.Close()
+
+		order := make(chan string, 2)
+		ctx.BeforeCancel(func(hook Context, sig os.Signal) {
+			assert.Equal[os.Signal](t, syscall.SIGUSR1, sig)
+			assert.Equal(t, nil, ctx.Err(), "work context canceled before the hook")
+			_, ok := hook.Deadline()
+			assert.Equal(t, true, ok, "hook context has no grace deadline")
+			time.Sleep(20 * time.Millisecond)
+			order <- "first"
+		})
+		ctx.BeforeCancel(func(Context, os.Signal) {
+			order <- "second"
+		})
+
+		go sendSignal(syscall.SIGUSR1)
+		<-ctx.Done()
+		assert.Equal(t, "first", receive(t, order, time.Second, "the first hook didn't run"))
+		assert.Equal(t, "second", receive(t, order, time.Second, "the second hook didn't run"))
+		sig, ok := SignalCause(ctx)
+		assert.Equal(t, true, ok)
+		assert.Equal[os.Signal](t, syscall.SIGUSR1, sig)
+	})
+
+	t.Run("the grace period cancels a hook that takes too long", func(t *testing.T) {
+		ctx := Shutdown(Signals(syscall.SIGUSR1), GracePeriod(50*time.Millisecond))
+		defer ctx.Close()
+
+		hookDone := make(chan error, 1)
+		ctx.BeforeCancel(func(hook Context, _ os.Signal) {
+			<-hook.Done()
+			hookDone <- hook.Err()
+		})
+		var skipped bool
+		ctx.BeforeCancel(func(Context, os.Signal) { skipped = true })
+
+		go sendSignal(syscall.SIGUSR1)
+		receive(t, ctx.Done(), time.Second, "the grace period didn't cancel the work context")
+		err := receive(t, hookDone, time.Second, "the hook's context wasn't canceled")
+		assert.Equal(t, DeadlineExceeded, err)
+		assert.Equal(t, false, skipped, "hook run after the grace period")
+	})
+
+	t.Run("a further signal runs a handler while hooks run", func(t *testing.T) {
+		ctx := Shutdown(Signals(syscall.SIGUSR1))
+		defer ctx.Close()
+
+		release := make(chan struct{})
+		ctx.BeforeCancel(func(Context, os.Signal) { <-release })
+		handled := make(chan os.Signal, 1)
+		ctx.AddHandler(func(sig os.Signal) { handled <- sig })
+
+		go func() {
+			sendSignal(syscall.SIGUSR1)
+			sendSignal(syscall.SIGUSR1)
+		}()
+		sig := receive(t, handled, time.Second, "the second signal didn't run the handler")
+		assert.Equal[os.Signal](t, syscall.SIGUSR1, sig)
+		assert.Equal(t, nil, ctx.Err(), "work context canceled while the hook runs")
+		close(release)
+		<-ctx.Done()
+	})
+
+	t.Run("Close waits for the hooks", func(t *testing.T) {
+		ctx := Shutdown(Signals(syscall.SIGUSR1))
+
+		started := make(chan struct{})
+		var finished bool
+		ctx.BeforeCancel(func(Context, os.Signal) {
+			close(started)
+			time.Sleep(50 * time.Millisecond)
+			finished = true
+		})
+
+		go sendSignal(syscall.SIGUSR1)
+		receive(t, started, time.Second, "the hook didn't run")
+		ctx.Close()
+		assert.Equal(t, true, finished, "Close returned before the hook")
+	})
+
+	t.Run("not run on Close", func(t *testing.T) {
+		ctx := Shutdown(Signals(syscall.SIGUSR1))
+
+		var called bool
+		ctx.BeforeCancel(func(Context, os.Signal) { called = true })
+		ctx.Close()
+		assert.Equal(t, false, called)
+	})
+}
+
+func TestShutdownInterceptTerminal(t *testing.T) {
+	isTerminal = func() bool { return false }
+	defer func() { isTerminal = func() bool { return true } }()
+
+	ctx := Shutdown()
+	defer ctx.Close()
+
+	var intercepted bool
+	ctx.Intercept(func() { intercepted = true }, 0)
+
+	go sendSignal(syscall.SIGINT)
+	receive(t, ctx.Done(), time.Second, "the interrupt didn't cancel the work context")
+	assert.Equal(t, false, intercepted, "intercepted outside a terminal")
 }

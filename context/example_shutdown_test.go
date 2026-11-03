@@ -59,7 +59,7 @@ func (s *server) HardStop() {
 // second signal runs the handler, which stops the process at once. The program
 // context is canceled last, by Close.
 func ExampleShutdown_childProcess() {
-	ctx := context.Shutdown(syscall.SIGUSR1)
+	ctx := context.Shutdown(context.Signals(syscall.SIGUSR1))
 
 	server := startServer(ctx.Program())
 	stopped := make(chan struct{})
@@ -69,7 +69,7 @@ func ExampleShutdown_childProcess() {
 	}()
 
 	// The second signal: draining is taking too long, so stop now.
-	ctx.AddHandler(func() {
+	ctx.AddHandler(func(os.Signal) {
 		fmt.Println("second signal: stopping the server now")
 		server.HardStop()
 	})
@@ -103,7 +103,7 @@ func ExampleShutdown_confirmInterrupt() {
 	defer ctx.Close()
 
 	step := make(chan struct{})
-	ctx.InterceptTimeout(func() {
+	ctx.Intercept(func() {
 		fmt.Println("CTRL+C received, press again to shut down gracefully ...")
 		step <- struct{}{}
 	}, 5*time.Second)
@@ -118,7 +118,7 @@ func ExampleShutdown_confirmInterrupt() {
 		step <- struct{}{}
 	})
 
-	ctx.AddHandler(func() {
+	ctx.AddHandler(func(os.Signal) {
 		fmt.Println("CTRL+C pressed again, shutting down immediately ...")
 		step <- struct{}{}
 	})
@@ -132,4 +132,42 @@ func ExampleShutdown_confirmInterrupt() {
 	// CTRL+C received, press again to shut down gracefully ...
 	// interrupt received, shutting down gracefully, press again to stop now ...
 	// CTRL+C pressed again, shutting down immediately ...
+}
+
+// legacyServer stands in for a server that doesn't stop gracefully when its
+// context is canceled, like one whose process was started with
+// exec.CommandContext on that context.
+type legacyServer struct{}
+
+func (legacyServer) GracefulStop(ctx context.Context) {
+	fmt.Println("warning players, then stopping the server")
+}
+
+// A server that only stops abruptly when its context is canceled is stopped
+// gracefully by a BeforeCancel function instead. It runs on the signal that
+// starts the shutdown, while the work context is still live, and the work
+// context is canceled once it returns or the grace period is over.
+func ExampleShutdown_beforeCancel() {
+	ctx := context.Shutdown(
+		context.Signals(syscall.SIGUSR1),
+		context.GracePeriod(30*time.Second),
+	)
+	defer ctx.Close()
+
+	var server legacyServer
+	ctx.BeforeCancel(func(ctx context.Context, sig os.Signal) {
+		fmt.Printf("%v received, shutting down gracefully ...\n", sig)
+		fmt.Printf("  work canceled: %v\n", ctx.Err() != nil)
+		server.GracefulStop(ctx)
+	})
+
+	syscall.Kill(syscall.Getpid(), syscall.SIGUSR1)
+	<-ctx.Done()
+	fmt.Println("work canceled")
+
+	// Output:
+	// user defined signal 1 received, shutting down gracefully ...
+	//   work canceled: false
+	// warning players, then stopping the server
+	// work canceled
 }

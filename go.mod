@@ -4,7 +4,10 @@ go 1.27
 
 tool go.chrisrx.dev/tools/cmd/aliaspkg
 
-require golang.org/x/crypto v0.51.0
+require (
+	golang.org/x/crypto v0.51.0
+	golang.org/x/term v0.43.0
+)
 
 require (
 	github.com/google/go-cmp v0.7.0 // indirect

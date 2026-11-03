@@ -43,7 +43,7 @@ func ExampleMustParseFor_fileServer() {
 		MaxHeaderBytes: opts.MaxHeaderBytes,
 		BaseContext:    func(net.Listener) context.Context { return ctx },
 	}
-	ctx.AddHandler(func() {
+	ctx.AddHandler(func(os.Signal) {
 		fmt.Println("\rCTRL+C pressed, attempting graceful shutdown ...")
 		if err := s.Shutdown(ctx); err != nil {
 			panic(err)

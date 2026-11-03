@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/term"
+
 	"go.chrisrx.dev/x/safe"
 )
 
@@ -17,11 +19,12 @@ import (
 // functions when the context is marked done.
 //
 // It is two contexts. The ShutdownContext itself is the work context, the one
-// passed to everything: the first signal cancels it, so work can wind down,
-// gracefully if it likes. [ShutdownContext.Program] is the program's own
-// context, its parent: it is canceled last, by [ShutdownContext.Close], after
-// the cleanup functions have run. Things that must outlive the work, like a
-// child process a graceful shutdown still needs, belong to the program context.
+// passed to everything: it is canceled once a shutdown starts, so work can
+// wind down, gracefully if it likes. [ShutdownContext.Program] is the
+// program's own context, its parent: it is canceled last, by
+// [ShutdownContext.Close], after the cleanup functions have run. Things that
+// must outlive the work, like a child process a graceful shutdown still needs,
+// belong to the program context.
 type ShutdownContext interface {
 	context.Context
 
@@ -31,19 +34,30 @@ type ShutdownContext interface {
 	Program() context.Context
 
 	// Intercept adds a function to run on an interrupt (CTRL+C) in place of
-	// canceling the work context, e.g. to ask for another to confirm. Each one
-	// consumes a single interrupt, in FIFO order, and only before the work
-	// context is canceled. Other signals, like SIGTERM, are never intercepted.
-	Intercept(fn func())
+	// starting the shutdown, e.g. to ask for another to confirm. Each one
+	// consumes a single interrupt, in FIFO order, and only before the shutdown
+	// starts. When timeout is positive, the intercept is restored if no other
+	// interrupt follows within it. Other signals, like SIGTERM, are never
+	// intercepted.
+	//
+	// Intercepts only apply when stdin is a terminal, since otherwise no one is
+	// there to press CTRL+C again. Elsewhere Intercept does nothing.
+	Intercept(fn func(), timeout time.Duration)
 
-	// InterceptTimeout is like [ShutdownContext.Intercept], but the intercept
-	// is restored when no other interrupt follows within timeout.
-	InterceptTimeout(fn func(), timeout time.Duration)
+	// BeforeCancel adds a function to run on the signal that starts the
+	// shutdown, before the work context is canceled, e.g. to stop a service
+	// that doesn't stop gracefully on its own when its context is canceled.
+	// The functions run one at a time, in FIFO order, with a context that is
+	// the work context bounded by the grace period, see [GracePeriod]. The work
+	// context is canceled once they have all returned or the grace period is
+	// over, whichever is first. They don't run when the shutdown starts
+	// without a signal, like on [ShutdownContext.Close].
+	BeforeCancel(fn func(ctx context.Context, sig os.Signal))
 
 	// AddHandler adds a handler function to run on a further signal, after the
-	// first has canceled the work context, e.g. to stop at once when a graceful
-	// shutdown is taking too long.
-	AddHandler(func())
+	// shutdown has started, e.g. to stop at once when a graceful shutdown is
+	// taking too long. Each one consumes a single signal, in FIFO order.
+	AddHandler(fn func(sig os.Signal))
 
 	// AddCleanup adds cleanup functions associated with a [ShutdownContext].
 	// These are called when the context is cleaned up by the Go runtime. There
@@ -55,14 +69,48 @@ type ShutdownContext interface {
 	Wait()
 
 	// Close cancels the work context, runs any registered cleanup functions
-	// and then cancels the program context.
+	// and then cancels the program context. When a signal has started the
+	// shutdown, it first waits for the [ShutdownContext.BeforeCancel]
+	// functions, up to the grace period, so it must not be called from one.
 	Close()
 }
 
 var defaultShutdownSignals = []os.Signal{
 	os.Interrupt,
-	syscall.SIGINT,
 	syscall.SIGTERM,
+}
+
+// DefaultGracePeriod is the grace period of a [ShutdownContext] unless set
+// with [GracePeriod]. It is a little under the 30s Kubernetes waits by default
+// before a SIGKILL, so the program has time to exit after the work context is
+// canceled.
+const DefaultGracePeriod = 25 * time.Second
+
+// ShutdownOption configures a [ShutdownContext].
+type ShutdownOption func(*shutdownConfig)
+
+type shutdownConfig struct {
+	signals []os.Signal
+	grace   time.Duration
+}
+
+// Signals sets the signals that a [ShutdownContext] handles, in place of the
+// default os.Interrupt and SIGTERM.
+func Signals(signals ...os.Signal) ShutdownOption {
+	return func(c *shutdownConfig) {
+		c.signals = signals
+	}
+}
+
+// GracePeriod bounds how long the [ShutdownContext.BeforeCancel] functions can
+// take before the work context is canceled. It should be less than the time
+// whatever sends the signal waits before killing the process, like the
+// terminationGracePeriodSeconds of a Kubernetes pod. A non-positive d removes
+// the limit. The default is [DefaultGracePeriod].
+func GracePeriod(d time.Duration) ShutdownOption {
+	return func(c *shutdownConfig) {
+		c.grace = d
+	}
 }
 
 var (
@@ -73,53 +121,69 @@ var (
 	shutdownHandlersKey = Key[*shutdownHandlers]()
 )
 
+// isTerminal reports whether stdin is a terminal, where an interrupt can come
+// from someone pressing CTRL+C. It is a variable so tests can replace it.
+var isTerminal = func() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
+}
+
 // Shutdown returns a new [ShutdownContext] using [context.Background] as the
-// parent of its program context. It runs any registered handler functions when
-// receiving any of the provided signals, otherwise using a default set of
-// signals.
+// parent of its program context. It handles os.Interrupt and SIGTERM, unless
+// set otherwise with [Signals].
 //
 // Interrupts are first consumed by any intercepts, see
-// [ShutdownContext.Intercept]. Then the first signal cancels the work context,
-// with a [SignalError] as its cause, which is where work notices it should
-// stop, gracefully if it likes. Each further signal runs the next
+// [ShutdownContext.Intercept]. Then the first signal starts the shutdown: the
+// [ShutdownContext.BeforeCancel] functions run, and then the work context is
+// canceled, with a [SignalError] as its cause. That is where work notices it
+// should stop, gracefully if it likes. Each further signal runs the next
 // handler function, in FIFO order of calls to [ShutdownContext.AddHandler], to
 // escalate, e.g. to a hard stop when a graceful one takes too long. Once there
 // are no handlers left, a further signal restores the default signal behavior
-// and is raised again, ending the process.
+// and is raised again, ending the process. Where a process can't signal
+// itself, like with an interrupt on Windows, it exits instead, with 128 plus
+// the signal number.
 //
 // So with no handlers, the first signal lets a program that waits on the
 // context exit normally, and a second ends it.
-func Shutdown(signals ...os.Signal) ShutdownContext {
+func Shutdown(opts ...ShutdownOption) ShutdownContext {
+	cfg := shutdownConfig{
+		signals: defaultShutdownSignals,
+		grace:   DefaultGracePeriod,
+	}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	program, cancelProgram := context.WithCancel(context.Background())
 	s := &shutdownCtx{
 		cancelProgram: cancelProgram,
+		grace:         cfg.grace,
+		drained:       make(chan struct{}),
 	}
 	// The values are set on the program context, so they're found from either.
 	program = shutdownHandlersKey.WithValue(program, &shutdownHandlers{})
 	program = shutdownCtxKey.WithValue(program, s)
 	s.program = program
 	s.Context, s.cancel = context.WithCancelCause(program)
-	ctx, cancel := s.Context, s.cancel
 
 	logger := logger.With(
 		slog.String("type", fmt.Sprintf("%T", s)),
 		slog.String("addr", fmt.Sprintf("%p", s)),
 	)
 
-	if len(signals) == 0 {
-		signals = defaultShutdownSignals
-	}
 	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, signals...)
+	signal.Notify(ch, cfg.signals...)
 
 	go func() {
 		defer func() {
 			logger.Debug("shutdown stopping ...")
-			cancel(nil)
-			safe.Close(ch)
+			// Stop before closing, so the signal package never sends on the
+			// closed channel.
 			signal.Stop(ch)
+			safe.Close(ch)
 		}()
 
+		sh := shutdownHandlersKey.Value(s.Context)
 		for {
 			select {
 			case <-program.Done():
@@ -130,8 +194,7 @@ func Shutdown(signals ...os.Signal) ShutdownContext {
 					logger.Debug("signal notify stopped")
 					return
 				}
-				sh := shutdownHandlersKey.Value(ctx)
-				if ctx.Err() == nil {
+				if !sh.isStarted() {
 					if sig == os.Interrupt {
 						if fn := sh.intercept(); fn != nil {
 							logger.Debug("interrupt intercepted")
@@ -139,25 +202,43 @@ func Shutdown(signals ...os.Signal) ShutdownContext {
 							continue
 						}
 					}
-					logger.Debug("canceling work context")
-					cancel(SignalError{Signal: sig})
-					continue
+					if sh.startSignal() {
+						logger.Debug("starting shutdown")
+						go s.drain(sig)
+						continue
+					}
 				}
-				if sh.remaining() > 0 {
-					go run("shutdown handler", sh.next())
+				if fn := sh.next(); fn != nil {
+					go run("shutdown handler", func() { fn(sig) })
 					continue
 				}
 				logger.Debug("shutdown context done")
 				// Restore normal signal handling and attempt to resend signal back
 				// to this process.
 				signal.Stop(ch)
-				self, _ := os.FindProcess(os.Getpid())
-				self.Signal(sig)
+				raise(sig)
 				return
 			}
 		}
 	}()
 	return s
+}
+
+// raise sends sig to this process, now that it is no longer handled, to end
+// it. Where that isn't possible, like with an interrupt on Windows, it exits
+// with the code a shell gives a process ended by the signal.
+func raise(sig os.Signal) {
+	self, err := os.FindProcess(os.Getpid())
+	if err == nil {
+		err = self.Signal(sig)
+	}
+	if err != nil {
+		code := 1
+		if sig, ok := sig.(syscall.Signal); ok {
+			code = 128 + int(sig)
+		}
+		os.Exit(code)
+	}
 }
 
 func run(name string, fn func()) {
@@ -170,19 +251,19 @@ func run(name string, fn func()) {
 // package-level convenience for callers that hold a plain [context.Context]
 // rather than a [ShutdownContext] directly. If ctx does not contain a
 // [ShutdownContext], the call is a no-op.
-func Intercept(ctx context.Context, fn func()) {
+func Intercept(ctx context.Context, fn func(), timeout time.Duration) {
 	shutdownCtxKey.ValueFunc(ctx, func(ctx *shutdownCtx) {
-		ctx.Intercept(fn)
+		ctx.Intercept(fn, timeout)
 	})
 }
 
-// InterceptTimeout adds fn to the [ShutdownContext] embedded in ctx. It is a
+// BeforeCancel adds fn to the [ShutdownContext] embedded in ctx. It is a
 // package-level convenience for callers that hold a plain [context.Context]
 // rather than a [ShutdownContext] directly. If ctx does not contain a
 // [ShutdownContext], the call is a no-op.
-func InterceptTimeout(ctx context.Context, fn func(), timeout time.Duration) {
+func BeforeCancel(ctx context.Context, fn func(ctx context.Context, sig os.Signal)) {
 	shutdownCtxKey.ValueFunc(ctx, func(ctx *shutdownCtx) {
-		ctx.InterceptTimeout(fn, timeout)
+		ctx.BeforeCancel(fn)
 	})
 }
 
@@ -190,7 +271,7 @@ func InterceptTimeout(ctx context.Context, fn func(), timeout time.Duration) {
 // package-level convenience for callers that hold a plain [context.Context]
 // rather than a [ShutdownContext] directly. If ctx does not contain a
 // [ShutdownContext], the call is a no-op.
-func AddHandler(ctx context.Context, fn func()) {
+func AddHandler(ctx context.Context, fn func(sig os.Signal)) {
 	shutdownCtxKey.ValueFunc(ctx, func(ctx *shutdownCtx) {
 		ctx.AddHandler(fn)
 	})
@@ -212,6 +293,39 @@ type shutdownCtx struct {
 
 	program       context.Context
 	cancelProgram context.CancelFunc
+
+	grace time.Duration
+	// drained is closed once a signal has started the shutdown and the work
+	// context is canceled, after the BeforeCancel functions.
+	drained chan struct{}
+}
+
+// drain runs the BeforeCancel functions for the signal that started the
+// shutdown, then cancels the work context.
+func (s *shutdownCtx) drain(sig os.Signal) {
+	defer close(s.drained)
+	defer s.cancel(SignalError{Signal: sig})
+
+	ctx, cancel := s.Context, context.CancelFunc(func() {})
+	if s.grace > 0 {
+		ctx, cancel = context.WithTimeout(s.Context, s.grace)
+	}
+	defer cancel()
+
+	sh := shutdownHandlersKey.Value(s.Context)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		// Functions added while these run are run too.
+		for fn := sh.nextBefore(); fn != nil && ctx.Err() == nil; fn = sh.nextBefore() {
+			run("before cancel", func() { fn(ctx, sig) })
+		}
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		logger.Debug("grace period over, canceling work context")
+	}
 }
 
 func (s *shutdownCtx) Program() context.Context {
@@ -219,23 +333,28 @@ func (s *shutdownCtx) Program() context.Context {
 }
 
 // Intercept adds a function to a [ShutdownContext] to run on an interrupt in
-// place of canceling the work context.
-func (s *shutdownCtx) Intercept(fn func()) {
-	s.InterceptTimeout(fn, 0)
-}
-
-// InterceptTimeout adds a function to a [ShutdownContext] to run on an
-// interrupt in place of canceling the work context, restored when no other
-// interrupt follows within timeout.
-func (s *shutdownCtx) InterceptTimeout(fn func(), timeout time.Duration) {
+// place of starting the shutdown, restored when timeout is positive and no
+// other interrupt follows within it.
+func (s *shutdownCtx) Intercept(fn func(), timeout time.Duration) {
+	if !isTerminal() {
+		return
+	}
 	shutdownHandlersKey.ValueFunc(s.Context, func(sh *shutdownHandlers) {
 		sh.addIntercept(fn, timeout)
 	})
 }
 
+// BeforeCancel adds a function to a [ShutdownContext] to run on the signal that
+// starts the shutdown, before the work context is canceled.
+func (s *shutdownCtx) BeforeCancel(fn func(ctx context.Context, sig os.Signal)) {
+	shutdownHandlersKey.ValueFunc(s.Context, func(sh *shutdownHandlers) {
+		sh.addBefore(fn)
+	})
+}
+
 // AddHandler adds a handler function to a [ShutdownContext] to run on a further
-// signal, after the first has canceled the work context.
-func (s *shutdownCtx) AddHandler(fn func()) {
+// signal, after the shutdown has started.
+func (s *shutdownCtx) AddHandler(fn func(sig os.Signal)) {
 	shutdownHandlersKey.ValueFunc(s.Context, func(sh *shutdownHandlers) {
 		sh.addHandler(fn)
 	})
@@ -260,23 +379,59 @@ func (s *shutdownCtx) Wait() {
 }
 
 func (s *shutdownCtx) Close() {
+	sh := shutdownHandlersKey.Value(s.Context)
+	// From here on a signal is a further one, so it runs a handler.
+	if sh.startClose() {
+		// The BeforeCancel functions still need the work context.
+		<-s.drained
+	}
 	s.cancel(nil)
-	shutdownHandlersKey.Value(s.Context).Close()
+	sh.Close()
 	s.cancelProgram()
 }
 
 type shutdownHandlers struct {
 	mu              sync.Mutex
+	started         bool // a signal or Close has started the shutdown
+	draining        bool // a signal started it, so the BeforeCancel functions run
 	intercepts      []intercept
 	armed           int    // the index of the next intercept
 	interrupts      uint64 // counts interrupts, to tell if one followed an intercept
-	handlers        []func()
+	before          []func(context.Context, os.Signal)
+	handlers        []func(os.Signal)
 	cleanupHandlers []func()
 }
 
 type intercept struct {
 	fn      func()
 	timeout time.Duration
+}
+
+func (s *shutdownHandlers) isStarted() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.started
+}
+
+// startSignal starts the shutdown for a signal, reporting false when it had
+// already started.
+func (s *shutdownHandlers) startSignal() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.started {
+		return false
+	}
+	s.started, s.draining = true, true
+	return true
+}
+
+// startClose starts the shutdown for Close, reporting whether a signal had
+// already started it.
+func (s *shutdownHandlers) startClose() (draining bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.started = true
+	return s.draining
 }
 
 func (s *shutdownHandlers) addIntercept(fn func(), timeout time.Duration) {
@@ -309,29 +464,45 @@ func (s *shutdownHandlers) intercept() func() {
 	return in.fn
 }
 
-func (s *shutdownHandlers) addHandler(fn func()) {
+func (s *shutdownHandlers) addBefore(fn func(context.Context, os.Signal)) {
+	s.mu.Lock()
+	s.before = append(s.before, fn)
+	s.mu.Unlock()
+}
+
+// nextBefore consumes the next BeforeCancel function, or returns nil when
+// there are none left.
+func (s *shutdownHandlers) nextBefore() (next func(context.Context, os.Signal)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.before) == 0 {
+		return nil
+	}
+	next, s.before = s.before[0], s.before[1:]
+	return next
+}
+
+func (s *shutdownHandlers) addHandler(fn func(os.Signal)) {
 	s.mu.Lock()
 	s.handlers = append(s.handlers, fn)
 	s.mu.Unlock()
+}
+
+// next consumes the next handler, or returns nil when there are none left.
+func (s *shutdownHandlers) next() (next func(os.Signal)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.handlers) == 0 {
+		return nil
+	}
+	next, s.handlers = s.handlers[0], s.handlers[1:]
+	return next
 }
 
 func (s *shutdownHandlers) addCleanup(fn func()) {
 	s.mu.Lock()
 	s.cleanupHandlers = append(s.cleanupHandlers, fn)
 	s.mu.Unlock()
-}
-
-func (s *shutdownHandlers) remaining() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return len(s.handlers)
-}
-
-func (s *shutdownHandlers) next() (next func()) {
-	s.mu.Lock()
-	next, s.handlers = s.handlers[0], s.handlers[1:]
-	s.mu.Unlock()
-	return
 }
 
 func (s *shutdownHandlers) Close() (next func()) {

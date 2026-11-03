@@ -31,12 +31,12 @@ The key itself is a pointer to an unexported generic type, so two `Key[V]()` cal
 
 ## Graceful shutdown
 
-`Shutdown` returns a `ShutdownContext` that listens for OS signals (`SIGINT`, `SIGTERM`). It's two contexts:
+`Shutdown` returns a `ShutdownContext` that listens for OS signals (`SIGINT`, `SIGTERM`, or others set with the `Signals` option). It's two contexts:
 
-- The `ShutdownContext` itself is the work context, the one you pass around. The first signal cancels it, so work notices and winds down, gracefully if it likes.
+- The `ShutdownContext` itself is the work context, the one you pass around. The first signal cancels it, after any `BeforeCancel` functions, so work notices and winds down, gracefully if it likes.
 - `Program()` is its parent, the program's own context. It's canceled last, by `Close`, after the cleanup functions run. Things a graceful shutdown still needs, like a child process, belong to it.
 
-Each further signal runs the next handler added with `AddHandler`, in FIFO order, to escalate when a graceful shutdown takes too long. Once there are none left, the next signal restores default signal handling and is raised again, ending the process. With no handlers, the first signal lets a program that waits on its context exit normally, and a second ends it.
+Each further signal runs the next handler added with `AddHandler`, in FIFO order, to escalate when a graceful shutdown takes too long. Each handler is passed the signal that ran it. Once there are none left, the next signal restores default signal handling and is raised again, ending the process. Where a process can't signal itself, like with an interrupt on Windows, it exits with 128 plus the signal number instead. With no handlers, the first signal lets a program that waits on its context exit normally, and a second ends it.
 
 ```go
 ctx := context.Shutdown()
@@ -47,7 +47,7 @@ defer ctx.Close()
 server := StartServer(ctx.Program())
 
 // Second signal: stop without waiting for the connections.
-ctx.AddHandler(func() {
+ctx.AddHandler(func(sig os.Signal) {
     server.HardStop()
 })
 
@@ -70,15 +70,31 @@ context.AfterSignal(ctx, func(sig os.Signal) {
 })
 ```
 
-To guard against an accidental CTRL+C, `Intercept` adds a function that runs on an interrupt in place of canceling the work context. Each intercept consumes one interrupt, in FIFO order, and only before the work context is canceled. `InterceptTimeout` restores the intercept when no other interrupt follows within the timeout. Only interrupts are intercepted: a SIGTERM, as sent by Kubernetes, systemd or `docker stop`, comes once before a SIGKILL, so it always goes straight to canceling.
+To guard against an accidental CTRL+C, `Intercept` adds a function that runs on an interrupt in place of starting the shutdown. Each intercept consumes one interrupt, in FIFO order, and only before the shutdown starts. With a positive timeout, the intercept is restored when no other interrupt follows within it. Intercepts only apply when stdin is a terminal, since otherwise no one is there to press CTRL+C again, so `Intercept` does nothing elsewhere. Only interrupts are intercepted: a SIGTERM, as sent by Kubernetes, systemd or `docker stop`, comes once before a SIGKILL, so it always goes straight to canceling.
 
 ```go
-ctx.InterceptTimeout(func() {
+ctx.Intercept(func() {
     fmt.Println("\rCTRL+C received, press again to shut down gracefully ...")
 }, 5*time.Second)
 ```
 
-The ladder is then: intercepts, canceling the work context, handlers, and re-raising the signal. See `ExampleShutdown_confirmInterrupt`.
+The ladder is then: intercepts, `BeforeCancel` functions, canceling the work context, handlers, and re-raising the signal. See `ExampleShutdown_confirmInterrupt`.
+
+### Services that don't stop gracefully
+
+Some services stop abruptly when their context is canceled, like one whose child process was started with `exec.CommandContext` on that context. `BeforeCancel` adds a function that runs on the signal that starts the shutdown, while the work context is still live, so it can stop the service gracefully first. The functions run one at a time, in FIFO order, and the work context is canceled once they have all returned or the grace period is over, whichever is first. Each is passed the signal, and a context that is the work context bounded by the grace period, so it can tell how long it has.
+
+```go
+ctx := context.Shutdown(context.GracePeriod(20 * time.Second))
+defer ctx.Close()
+
+ctx.BeforeCancel(func(ctx context.Context, sig os.Signal) {
+    fmt.Printf("\r%v received, shutting down gracefully ...\n", sig)
+    server.GracefulStop(ctx)
+})
+```
+
+The grace period defaults to `DefaultGracePeriod`, 25s, a little under the 30s Kubernetes waits by default before a SIGKILL. Set it below whatever the program runs under allows. `BeforeCancel` functions only run for a signal, not when the program shuts down on its own with `Close`, and `Close` waits for any that are running. See `ExampleShutdown_beforeCancel`.
 
 Cleanup functions registered with `AddCleanup` run when the context is garbage collected. Unlike handlers they are not triggered by signals — they are a last-resort cleanup path with no ordering guarantees relative to program exit.
 
@@ -101,7 +117,7 @@ func main() {
 }
 ```
 
-`Intercept`, `InterceptTimeout`, `AddHandler` and `AddCleanup` are also available as package-level functions that accept any `context.Context`, logging a warning when the context is not a `ShutdownContext`.
+`Intercept`, `BeforeCancel`, `AddHandler` and `AddCleanup` are also available as package-level functions that accept any `context.Context`, logging a warning when the context is not a `ShutdownContext`.
 
 Use the package-level `AddCleanup` in constructors that receive a `context.Context` to register cleanup automatically when the caller passes a `ShutdownContext`:
 
@@ -128,6 +144,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"go.chrisrx.dev/x/context"
@@ -148,11 +165,11 @@ func main() {
 	ctx := context.Shutdown()
 	defer ctx.Close()
 
-	ctx.AddHandler(func() {
+	ctx.AddHandler(func(os.Signal) {
 		fmt.Println("\rCTRL+C pressed, attempting graceful shutdown ...")
 		select {} // blocks indefinitely
 	})
-	ctx.AddHandler(func() {
+	ctx.AddHandler(func(os.Signal) {
 		fmt.Println("\rCTRL+C pressed again, shutting down immediately ...")
 	})
 	ctx.AddCleanup(func() {
