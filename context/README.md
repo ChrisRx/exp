@@ -31,26 +31,54 @@ The key itself is a pointer to an unexported generic type, so two `Key[V]()` cal
 
 ## Graceful shutdown
 
-`Shutdown` returns a `ShutdownContext` that listens for OS signals (`SIGINT`, `SIGTERM`) and executes registered handlers in FIFO order — one per signal received. When all handlers have run, or any handler completes, the context is cancelled and default signal handling is restored.
+`Shutdown` returns a `ShutdownContext` that listens for OS signals (`SIGINT`, `SIGTERM`). It's two contexts:
+
+- The `ShutdownContext` itself is the work context, the one you pass around. The first signal cancels it, so work notices and winds down, gracefully if it likes.
+- `Program()` is its parent, the program's own context. It's canceled last, by `Close`, after the cleanup functions run. Things a graceful shutdown still needs, like a child process, belong to it.
+
+Each further signal runs the next handler added with `AddHandler`, in FIFO order, to escalate when a graceful shutdown takes too long. Once there are none left, the next signal restores default signal handling and is raised again, ending the process. With no handlers, the first signal lets a program that waits on its context exit normally, and a second ends it.
 
 ```go
 ctx := context.Shutdown()
+defer ctx.Close()
 
-// First SIGINT: attempt a graceful drain.
+// The server's process belongs to the program, so canceling the work
+// context doesn't kill it while connections are draining.
+server := StartServer(ctx.Program())
+
+// Second signal: stop without waiting for the connections.
 ctx.AddHandler(func() {
-    fmt.Println("shutting down gracefully...")
-    server.Shutdown(context.Background())
+    server.HardStop()
 })
 
-// Second SIGINT: force exit.
-ctx.AddHandler(func() {
-    fmt.Println("forcing exit")
-    os.Exit(1)
-})
-
-// Block until the context is done.
-ctx.Wait()
+// Serves until the first signal, then drains the connections.
+server.Run(ctx)
 ```
+
+See `ExampleShutdown_childProcess` for this running end to end.
+
+The work context is canceled with a `SignalError` as its cause, so code that only has a `context.Context` can tell why it stopped. `SignalCause` returns the signal, and `AfterSignal` is like `AfterFunc` but only runs when a signal canceled the context, so a normal `Close` doesn't trigger it:
+
+```go
+context.AfterSignal(ctx, func(sig os.Signal) {
+    switch sig {
+    case os.Interrupt:
+        fmt.Printf("\r%v received, shutting down gracefully, press again to stop now ...\n", sig)
+    default:
+        fmt.Printf("received %v, shutting down gracefully ...\n", sig)
+    }
+})
+```
+
+To guard against an accidental CTRL+C, `Intercept` adds a function that runs on an interrupt in place of canceling the work context. Each intercept consumes one interrupt, in FIFO order, and only before the work context is canceled. `InterceptTimeout` restores the intercept when no other interrupt follows within the timeout. Only interrupts are intercepted: a SIGTERM, as sent by Kubernetes, systemd or `docker stop`, comes once before a SIGKILL, so it always goes straight to canceling.
+
+```go
+ctx.InterceptTimeout(func() {
+    fmt.Println("\rCTRL+C received, press again to shut down gracefully ...")
+}, 5*time.Second)
+```
+
+The ladder is then: intercepts, canceling the work context, handlers, and re-raising the signal. See `ExampleShutdown_confirmInterrupt`.
 
 Cleanup functions registered with `AddCleanup` run when the context is garbage collected. Unlike handlers they are not triggered by signals — they are a last-resort cleanup path with no ordering guarantees relative to program exit.
 
@@ -73,7 +101,7 @@ func main() {
 }
 ```
 
-`AddHandler` and `AddCleanup` are also available as package-level functions that accept any `context.Context`, logging a warning when the context is not a `ShutdownContext`.
+`Intercept`, `InterceptTimeout`, `AddHandler` and `AddCleanup` are also available as package-level functions that accept any `context.Context`, logging a warning when the context is not a `ShutdownContext`.
 
 Use the package-level `AddCleanup` in constructors that receive a `context.Context` to register cleanup automatically when the caller passes a `ShutdownContext`:
 
